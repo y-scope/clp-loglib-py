@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61.0", "setuptools_scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clp_logging"
+version = "0.0.1"
+license = { text = "Apache License 2.0" }
+authors = [
+    { name="davidlion", email="david.lion@yscope.com" },
+]
+description = "Logging/encoding/decoding using CLP's IR stream format"
+readme = "README.md"
+requires-python = ">=3.6"
+dependencies = [
+    "python-dateutil>=2.8.2",
+    "typing-extensions >= 4.1.1",
+    "zstandard >= 0.18.0",
+]
+classifiers = [
+"License :: OSI Approved :: Apache Software License",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/y-scope/clp-loglib-py"
+"Bug Tracker" = "https://github.com/y-scope/clp-loglib-py/issues"
+
+[tool.setuptools_scm]
+
+[tool.mypy]
+strict = true
+pretty = true
+
+[tool.black]
+line-length = 99
+target-version = ["py311"]
+color = true
+preview = true

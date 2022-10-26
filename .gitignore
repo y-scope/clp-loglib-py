@@ -1,0 +1,10 @@
+# Environment
+venv*/
+__pycache__
+
+# Packaging
+clp_logging.egg-info
+dist/
+
+# Testing
+unittest-logs/
