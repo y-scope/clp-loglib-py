@@ -25,6 +25,7 @@ class DtStreamHandler(logging.StreamHandler):
         super().__init__(stream)
         self.timezone: Optional[tzinfo] = datetime.now().astimezone().tzinfo
 
+    # override
     def emit(self, record: logging.LogRecord) -> None:
         try:
             clp_time: float = floor(time.time() * 1000) / 1000
@@ -34,6 +35,7 @@ class DtStreamHandler(logging.StreamHandler):
         except Exception:
             self.handleError(record)
 
+    # override
     def close(self) -> None:
         self.stream.close()
 
@@ -57,12 +59,14 @@ class TestCLPBase(unittest.TestCase):
     raw_log_path: Path
     clp_log_path: Path
 
+    # override
     @classmethod
     def setUpClass(cls) -> None:
         if not LOG_DIR.exists():
             LOG_DIR.mkdir(parents=True, exist_ok=True)
         assert LOG_DIR.is_dir()
 
+    # override
     def setUp(self) -> None:
         self.raw_log_path: Path = LOG_DIR / Path(f"{self.id()}.log")
         self.clp_log_path: Path = LOG_DIR / Path(f"{self.id()}.clp.zst")
@@ -148,6 +152,7 @@ class TestCLPBase(unittest.TestCase):
 
 
 class TestCLPSockHandler(TestCLPBase):
+    # override
     def setUp(self) -> None:
         super().setUp()
         self.sock_path: Path = self.clp_log_path.with_suffix(".sock")
@@ -174,6 +179,7 @@ class TestCLPSockHandler(TestCLPBase):
 
 
 class TestCLPStreamHandler(TestCLPBase):
+    # override
     def setUp(self) -> None:
         super().setUp()
         self.cleanup()

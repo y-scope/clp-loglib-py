@@ -1,7 +1,23 @@
 import json
 from typing import Dict, Optional, Tuple
 
-from clp_logging.protocol import *
+from clp_logging.protocol import (
+    BYTE_ORDER,
+    EOF_CHAR,
+    ID_LOGTYPE,
+    ID_MASK,
+    ID_TIMESTAMP,
+    ID_VAR,
+    MAGIC_NUMBER_COMPACT_ENCODING,
+    Metadata,
+    METADATA_JSON_ENCODING,
+    METADATA_LEN_UBYTE,
+    METADATA_LEN_USHORT,
+    SIZEOF,
+    SIZEOF_BYTE,
+    SIZEOF_SHORT,
+    VAR_COMPACT_ENCODING,
+)
 
 
 class CLPDecoder:
@@ -58,8 +74,8 @@ class CLPDecoder:
         """
         view: memoryview = memoryview(src[pos:])
 
-        magic_len: int = len(COMPACT_ENCODING_MAGIC_NUMBER)
-        if not view[pos : pos + magic_len] == COMPACT_ENCODING_MAGIC_NUMBER:
+        magic_len: int = len(MAGIC_NUMBER_COMPACT_ENCODING)
+        if not view[pos : pos + magic_len] == MAGIC_NUMBER_COMPACT_ENCODING:
             return None, -1
         pos += magic_len
         encoding_len: int = len(METADATA_JSON_ENCODING)
@@ -107,12 +123,12 @@ class CLPDecoder:
         signed: bool
         size, signed = info
         token_type: int = type_byte[0]
-        token_id: int = token_type & TYPE_ID_MASK
+        token_id: int = token_type & ID_MASK
         end: int = pos + size
         if end >= src_len:
             return -1, None, end
 
-        if token_id == VAR_ID:
+        if token_id == ID_VAR:
             if type_byte == VAR_COMPACT_ENCODING:
                 return token_type, src[pos:end], end
             else:
@@ -123,7 +139,7 @@ class CLPDecoder:
                     return -1, None, end
                 return token_type, src[pos:end], end
 
-        elif token_id == LOGTYPE_ID:
+        elif token_id == ID_LOGTYPE:
             logtype_size: int = int.from_bytes(src[pos:end], BYTE_ORDER, signed=signed)
             pos = end
             end += logtype_size
@@ -131,7 +147,7 @@ class CLPDecoder:
                 return -1, None, end
             return token_type, src[pos:end], end
 
-        elif token_id == TIMESTAMP_ID:
+        elif token_id == ID_TIMESTAMP:
             return token_type, src[pos:end], end
 
         else:

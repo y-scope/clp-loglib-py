@@ -6,8 +6,26 @@ from typing import IO, Iterator, List, Match, Optional, Type, Union
 
 from zstandard import ZstdDecompressor, ZstdDecompressionReader
 
-from clp_logging.decoder import CLPDecoder, Metadata
-from clp_logging.protocol import *
+from clp_logging.decoder import CLPDecoder
+from clp_logging.protocol import (
+    BYTE_ORDER,
+    DELIM_DICT,
+    DELIM_FLOAT,
+    DELIM_INT,
+    ID_EOF,
+    ID_LOGTYPE,
+    ID_MASK,
+    ID_TIMESTAMP,
+    ID_VAR,
+    Metadata,
+    METADATA_REFERENCE_TIMESTAMP_KEY,
+    METADATA_TIMESTAMP_PATTERN_KEY,
+    METADATA_TZ_ID_KEY,
+    RE_UNESCAPE,
+    RE_SUB_UNESCAPE,
+    VAR_COMPACT_ENCODING,
+    RE_DELIM_VAR,
+)
 
 
 class Log:
@@ -46,7 +64,7 @@ class Log:
         epoch time.
         :return: 0 on success, < 0 on error
         """
-        var_delim_matchs: List[Match[bytes]] = list(VAR_DELIM_RE.finditer(self._logtype))
+        var_delim_matchs: List[Match[bytes]] = list(RE_DELIM_VAR.finditer(self._logtype))
         if not len(self._vars) == len(var_delim_matchs):
             raise RuntimeError("Number of var delims in logtype does not match stored vars")
 
@@ -58,14 +76,14 @@ class Log:
 
             var_delim: bytes = var_delim_match.group(0)
             var_str: str
-            if var_delim == DICT_DELIM:
+            if var_delim == DELIM_DICT:
                 var_str = CLPDecoder.decode_dict(self._vars[i])
                 self.variables.append(var_str)
-            elif var_delim == INT_DELIM:
+            elif var_delim == DELIM_INT:
                 var_int: int
                 var_int, var_str = CLPDecoder.decode_int(self._vars[i])
                 self.variables.append(var_int)
-            elif var_delim == FLOAT_DELIM:
+            elif var_delim == DELIM_FLOAT:
                 var_float: float
                 var_float, var_str = CLPDecoder.decode_float(self._vars[i])
                 self.variables.append(var_float)
@@ -247,10 +265,10 @@ class CLPBaseReader(metaclass=ABCMeta):
 
                 offset += pos
                 # Once we read the timestamp we have completed a log
-                token_id: int = token_type & TYPE_ID_MASK
-                if token_id == TIMESTAMP_ID:
+                token_id: int = token_type & ID_MASK
+                if token_id == ID_TIMESTAMP:
                     return offset
-                elif token_id == EOF_ID:
+                elif token_id == ID_EOF:
                     return 0
 
             # Shift valid bytes to the start to make room for reading
@@ -272,22 +290,22 @@ class CLPBaseReader(metaclass=ABCMeta):
         `token_type`. Bytes in the raw log that match special encoding bytes
         were escaped, so we must unescape any set of bytes copied directly from
         `_buf` (dict variables and logtype).
-        :raises RuntimeError: If `token_type & TYPE_ID_MASK` is invalid
+        :raises RuntimeError: If `token_type & ID_MASK` is invalid
         """
-        token_id: int = token_type & TYPE_ID_MASK
-        if token_id == VAR_ID:
+        token_id: int = token_type & ID_MASK
+        if token_id == ID_VAR:
             t: bytes = bytes(token)
             if token_type != VAR_COMPACT_ENCODING[0]:
                 # remove any escaping done during encoding
-                t = UNESCAPE_RE.sub(UNESCAPE_SUB, t)
+                t = RE_UNESCAPE.sub(RE_SUB_UNESCAPE, t)
             log._vars.append(t)
-        elif token_id == LOGTYPE_ID:
-            log._logtype = UNESCAPE_RE.sub(UNESCAPE_SUB, token)
-        elif token_id == TIMESTAMP_ID:
+        elif token_id == ID_LOGTYPE:
+            log._logtype = RE_UNESCAPE.sub(RE_SUB_UNESCAPE, token)
+        elif token_id == ID_TIMESTAMP:
             delta_ms: int = int.from_bytes(token, BYTE_ORDER, signed=True)
             log.timestamp_ms = self.last_timestamp_ms + delta_ms
             self.last_timestamp_ms = log.timestamp_ms
-        elif token_id != EOF_ID:
+        elif token_id != ID_EOF:
             raise RuntimeError(f"Bad token token_id: {token_id}")
         return
 

@@ -4,17 +4,55 @@ import re
 import time
 from typing import Dict, Match, Pattern
 
-from clp_logging.protocol import *
+from clp_logging.protocol import (
+    BYTE_ORDER,
+    DELIM_DICT,
+    DELIM_INT,
+    DELIM_FLOAT,
+    LOGTYPE_STR_LEN_UBYTE,
+    LOGTYPE_STR_LEN_USHORT,
+    LOGTYPE_STR_LEN_INT,
+    MAGIC_NUMBER_COMPACT_ENCODING,
+    Metadata,
+    METADATA_JSON_ENCODING,
+    METADATA_LEN_UBYTE,
+    METADATA_LEN_USHORT,
+    METADATA_REFERENCE_TIMESTAMP_KEY,
+    METADATA_TIMESTAMP_PATTERN_KEY,
+    METADATA_TZ_ID_KEY,
+    METADATA_VERSION_KEY,
+    METADATA_VERSION_VALUE,
+    RE_DELIM_VAR,
+    RE_SUB_DELIM_VAR,
+    TIMESTAMP_DELTA_BYTE,
+    TIMESTAMP_DELTA_SHORT,
+    TIMESTAMP_DELTA_INT,
+    VAR_COMPACT_ENCODING,
+    VAR_STR_LEN_UBYTE,
+    VAR_STR_LEN_USHORT,
+    VAR_STR_LEN_INT,
+    SIZEOF_BYTE,
+    SIZEOF_INT,
+    SIZEOF_SHORT,
+    BYTE_MAX,
+    BYTE_MIN,
+    UBYTE_MAX,
+    SHORT_MAX,
+    SHORT_MIN,
+    USHORT_MAX,
+    INT_MAX,
+    INT_MIN,
+)
 
 # We use regex rather than manually checking each byte in a loop to simplify
 # the code and because looping in the interpreter is at least 4x slower than
 # using regex (as it is a c extension)
-TOKEN_RE: Pattern[bytes] = re.compile(rb"[--9+A-Z\\_a-z]+")
-DIGIT_RE: Pattern[bytes] = re.compile(b"[0-9]")
-PERIOD_RE: Pattern[bytes] = re.compile(rb"\.")
-NOT_NUM_RE: Pattern[bytes] = re.compile(b"[^0-9.-]")
-NOT_HEX_RE: Pattern[bytes] = re.compile(b"[^0-9A-Fa-f]")
-LETTER_RE: Pattern[bytes] = re.compile(b"[A-Za-z]")
+RE_TOKEN: Pattern[bytes] = re.compile(rb"[--9+A-Z\\_a-z]+")
+RE_DIGIT: Pattern[bytes] = re.compile(b"[0-9]")
+RE_PERIOD: Pattern[bytes] = re.compile(rb"\.")
+RE_NOT_NUM: Pattern[bytes] = re.compile(b"[^0-9.-]")
+RE_NOT_HEX: Pattern[bytes] = re.compile(b"[^0-9A-Fa-f]")
+RE_LETTER: Pattern[bytes] = re.compile(b"[A-Za-z]")
 
 # Eight digits + decimal point (no need to include negative sign)
 # Note: each byte is a digit character
@@ -40,7 +78,7 @@ class CLPEncoder:
         :raises NotImplementedError: If metadata length too large
         :return: The encoded preamble
         """
-        preamble: bytearray = bytearray(COMPACT_ENCODING_MAGIC_NUMBER)
+        preamble: bytearray = bytearray(MAGIC_NUMBER_COMPACT_ENCODING)
         preamble += METADATA_JSON_ENCODING
         metadata: Metadata = {
             METADATA_VERSION_KEY: METADATA_VERSION_VALUE,
@@ -50,10 +88,10 @@ class CLPEncoder:
         }
         json_bytes: bytes = json.dumps(metadata).encode()
         size: int = len(json_bytes)
-        if size <= MAX_UBYTE:
+        if size <= UBYTE_MAX:
             preamble += METADATA_LEN_UBYTE
             preamble += size.to_bytes(SIZEOF_BYTE, BYTE_ORDER)
-        elif size <= MAX_USHORT:
+        elif size <= USHORT_MAX:
             preamble += METADATA_LEN_USHORT
             preamble += size.to_bytes(SIZEOF_SHORT, BYTE_ORDER)
         else:
@@ -68,7 +106,7 @@ class CLPEncoder:
             token_int = int(token)
         except ValueError:
             return False
-        if token_int > MAX_INT:
+        if token_int > INT_MAX:
             return False
         clp_msg += VAR_COMPACT_ENCODING
         clp_msg += token_int.to_bytes(SIZEOF_INT, BYTE_ORDER, signed=True)
@@ -157,13 +195,13 @@ class CLPEncoder:
     @staticmethod
     def encode_dict(token: bytes, clp_msg: bytearray) -> None:
         size: int = len(token)
-        if size <= MAX_UBYTE:
+        if size <= UBYTE_MAX:
             clp_msg += VAR_STR_LEN_UBYTE
             clp_msg += size.to_bytes(SIZEOF_BYTE, BYTE_ORDER)
-        elif size <= MAX_USHORT:
+        elif size <= USHORT_MAX:
             clp_msg += VAR_STR_LEN_USHORT
             clp_msg += size.to_bytes(SIZEOF_SHORT, BYTE_ORDER)
-        elif size <= MAX_INT:
+        elif size <= INT_MAX:
             clp_msg += VAR_STR_LEN_INT
             clp_msg += size.to_bytes(SIZEOF_INT, BYTE_ORDER, signed=True)
         else:
@@ -173,13 +211,13 @@ class CLPEncoder:
     @staticmethod
     def encode_logtype(logtype: bytes, clp_msg: bytearray) -> None:
         size: int = len(logtype)
-        if size <= MAX_UBYTE:
+        if size <= UBYTE_MAX:
             clp_msg += LOGTYPE_STR_LEN_UBYTE
             clp_msg += size.to_bytes(SIZEOF_BYTE, BYTE_ORDER)
-        elif size <= MAX_USHORT:
+        elif size <= USHORT_MAX:
             clp_msg += LOGTYPE_STR_LEN_USHORT
             clp_msg += size.to_bytes(SIZEOF_SHORT, BYTE_ORDER)
-        elif size <= MAX_INT:
+        elif size <= INT_MAX:
             clp_msg += LOGTYPE_STR_LEN_INT
             clp_msg += size.to_bytes(SIZEOF_INT, BYTE_ORDER, signed=True)
         else:
@@ -196,31 +234,31 @@ class CLPEncoder:
         token: bytes = token_m.group(0)
 
         # Token contains decimal digit
-        if DIGIT_RE.search(token):
+        if RE_DIGIT.search(token):
             # Token contains byte not possible in int or float [^0-9.-]
-            if NOT_NUM_RE.search(token):
+            if RE_NOT_NUM.search(token):
                 CLPEncoder.encode_dict(token, clp_msg)
-                return DICT_DELIM
+                return DELIM_DICT
             # Token contains a period (decimal point)
-            elif PERIOD_RE.search(token):
+            elif RE_PERIOD.search(token):
                 if CLPEncoder.encode_float(token, clp_msg):
-                    return FLOAT_DELIM
+                    return DELIM_FLOAT
             else:
                 if CLPEncoder.encode_int(token, clp_msg):
-                    return INT_DELIM
+                    return DELIM_INT
             CLPEncoder.encode_dict(token, clp_msg)
-            return DICT_DELIM
+            return DELIM_DICT
 
         # Token is possible multi-char hex number
-        if len(token) > 1 and NOT_HEX_RE.search(token) is None:
+        if len(token) > 1 and RE_NOT_HEX.search(token) is None:
             CLPEncoder.encode_dict(token, clp_msg)
-            return DICT_DELIM
+            return DELIM_DICT
 
         # Token contains a letter and follows '='
         start: int = token_m.start()
-        if start > 0 and token_m.string[start - 1 : start] == b"=" and LETTER_RE.search(token):
+        if start > 0 and token_m.string[start - 1 : start] == b"=" and RE_LETTER.search(token):
             CLPEncoder.encode_dict(token, clp_msg)
-            return DICT_DELIM
+            return DELIM_DICT
 
         # Token is static text (not a variable)
         return token
@@ -235,13 +273,13 @@ class CLPEncoder:
         """
         timestamp_ms: int = floor(time.time() * 1000)  # convert to ms and truncate
         delta: int = timestamp_ms - last_timestamp_ms
-        if MAX_BYTE >= delta >= MIN_BYTE:
+        if BYTE_MAX >= delta >= BYTE_MIN:
             buf += TIMESTAMP_DELTA_BYTE
             buf += delta.to_bytes(SIZEOF_BYTE, BYTE_ORDER, signed=True)
-        elif MAX_SHORT >= delta >= MIN_SHORT:
+        elif SHORT_MAX >= delta >= SHORT_MIN:
             buf += TIMESTAMP_DELTA_SHORT
             buf += delta.to_bytes(SIZEOF_SHORT, BYTE_ORDER, signed=True)
-        elif MAX_INT >= delta >= MIN_INT:
+        elif INT_MAX >= delta >= INT_MIN:
             buf += TIMESTAMP_DELTA_INT
             buf += delta.to_bytes(SIZEOF_INT, BYTE_ORDER, signed=True)
         else:
@@ -255,13 +293,13 @@ class CLPEncoder:
         `logging.LogRecord`
         """
         # Escape dangerous bytes
-        msg = VAR_DELIM_RE.sub(VAR_DELIM_SUB, msg)
+        msg = RE_DELIM_VAR.sub(RE_SUB_DELIM_VAR, msg)
 
         clp_msg: bytearray = bytearray()
         logtype: bytearray = bytearray()
 
         pos: int = 0
-        for token in TOKEN_RE.finditer(msg):
+        for token in RE_TOKEN.finditer(msg):
             start, end = token.span()
             if start > 0:
                 logtype += msg[pos:start]

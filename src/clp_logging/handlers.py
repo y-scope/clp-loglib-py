@@ -206,8 +206,8 @@ class CLPSockHandler(logging.Handler):
                 raise
 
     # override
-    def setFormatter(self, formatter: Optional[logging.Formatter]) -> None:
-        _set_formatter(self, formatter)
+    def setFormatter(self, fmt: Optional[logging.Formatter]) -> None:
+        _set_formatter(self, fmt)
 
     # override
     def emit(self, record: logging.LogRecord) -> None:
@@ -271,10 +271,11 @@ class CLPStreamHandler(logging.Handler):
         self.timestamp_format, self.timezone = _init_timeinfo(timestamp_format, timezone)
         self.init(self.stream)
 
-    # override StreamHandler
-    def setFormatter(self, formatter: Optional[logging.Formatter]) -> None:
-        _set_formatter(self, formatter)
+    # override
+    def setFormatter(self, fmt: Optional[logging.Formatter]) -> None:
+        _set_formatter(self, fmt)
 
+    # override
     def emit(self, record: logging.LogRecord) -> None:
         try:
             if self.closed:
@@ -287,7 +288,7 @@ class CLPStreamHandler(logging.Handler):
             self.handleError(record)
 
     # Added to logging.StreamHandler in python 3.7
-    # override StreamHandler
+    # override
     def setStream(self, stream: IO[bytes]) -> Optional[IO[bytes]]:
         if not self.stream:
             self.stream = stream
@@ -305,6 +306,7 @@ class CLPStreamHandler(logging.Handler):
                 self.release()
             return self.stream
 
+    # override
     def close(self) -> None:
         self.zstream.flush()
         self.zstream.write(EOF_CHAR)
