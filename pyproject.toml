@@ -1,19 +1,19 @@
 [build-system]
-requires = ["setuptools>=61.0", "setuptools_scm"]
+requires = ["setuptools >= 61.0", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "clp_logging"
-version = "0.0.2"
+version = "0.0.3"
 license = { text = "Apache License 2.0" }
 authors = [
-    { name="davidlion", email="david.lion@yscope.com" },
+    { name="david lion", email="david.lion@yscope.com" },
 ]
 description = "Logging/encoding/decoding using CLP's IR stream format"
 readme = "README.md"
 requires-python = ">=3.6"
 dependencies = [
-    "python-dateutil>=2.8.2",
+    "python-dateutil >= 2.7.0",
     "typing-extensions >= 4.1.1",
     "zstandard >= 0.18.0",
 ]
