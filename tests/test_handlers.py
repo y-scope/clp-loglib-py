@@ -142,6 +142,7 @@ class TestCLPBase(unittest.TestCase):
     def test_dict(self) -> None:
         self.logger.info("textint test1234")
         self.logger.info("texteq=var")
+        self.logger.info(f">32bit int: {2**32}")
         self.compare_output()
 
     def test_combo(self) -> None:
