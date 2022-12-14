@@ -6,7 +6,7 @@ from typing_extensions import Final, Literal
 SIZEOF_INT: Final[int] = 4
 SIZEOF_SHORT: Final[int] = 2
 SIZEOF_BYTE: Final[int] = 1
-INT_MAX: Final[int] = (1 << 63) - 1
+INT_MAX: Final[int] = (1 << 31) - 1
 INT_MIN: Final[int] = ~INT_MAX
 USHORT_MAX: Final[int] = (1 << 16) - 1
 SHORT_MAX: Final[int] = (1 << 15) - 1
