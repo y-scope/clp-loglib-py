@@ -257,8 +257,9 @@ class CLPSockHandler(CLPBaseHandler):
             if self.closed:
                 raise RuntimeError("Socket already closed")
             self.sock.send(CLPEncoder.encode_message(msg.encode()))
-        except Exception:
+        except Exception as e:
             self.sock.close()
+            raise e
 
     # override
     def emit(self, record: logging.LogRecord) -> None:

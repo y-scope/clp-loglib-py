@@ -133,13 +133,15 @@ class TestCLPBase(unittest.TestCase):
         self.close()
         clp_logs: List[str] = self.read_clp()
         for clp_log, expected_log in zip(clp_logs, expected_logs):
+            # Removing timestamp from beginning of log, that we assume is
+            # always ISO formatted
             clp_msg: str = " ".join(clp_log.split()[2:])
             self.assertEqual(clp_msg, expected_log)
         self.compare_logs(clp_logs[len(expected_logs) :], self.read_raw())
 
 
 class TestCLPInitBase(TestCLPBase):
-    def test_start_time(self) -> None:
+    def test_time_format_at_start(self) -> None:
         self.clp_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
         self.raw_handler.setFormatter(logging.Formatter(" [%(levelname)s] %(message)s"))
         self.logger.info("format starts with %(asctime)s")
@@ -147,13 +149,13 @@ class TestCLPInitBase(TestCLPBase):
             [WARN_PREFIX + "replacing '%(asctime)s' with clp_logging timestamp format"]
         )
 
-    def test_bad_time(self) -> None:
+    def test_time_format_in_middle(self) -> None:
         fmt: str = "[%(levelname)s] %(asctime)s %(message)s"
         self.clp_handler.setFormatter(logging.Formatter(fmt))
         self.logger.info("format has %(asctime)s in the middle")
         self.assert_clp_logs([WARN_PREFIX + f"replacing '{fmt}' with '{DEFAULT_LOG_FORMAT}'"])
 
-    def test_no_time(self) -> None:
+    def test_time_format_missing(self) -> None:
         self.clp_handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
         self.raw_handler.setFormatter(logging.Formatter(" [%(levelname)s] %(message)s"))
         self.logger.info("no asctime in format")
