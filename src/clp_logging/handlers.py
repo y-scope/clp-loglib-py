@@ -82,7 +82,7 @@ class CLPBaseHandler(logging.Handler, metaclass=ABCMeta):
         self.formatter = fmt
 
     def _warn(self, msg: str) -> None:
-        self._write(" " + WARN_PREFIX + msg)
+        self._write(f" {WARN_PREFIX} {msg}")
 
     @abstractmethod
     def _write(self, msg: str) -> None:

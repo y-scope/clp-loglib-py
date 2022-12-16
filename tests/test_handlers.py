@@ -146,20 +146,20 @@ class TestCLPInitBase(TestCLPBase):
         self.raw_handler.setFormatter(logging.Formatter(" [%(levelname)s] %(message)s"))
         self.logger.info("format starts with %(asctime)s")
         self.assert_clp_logs(
-            [WARN_PREFIX + "replacing '%(asctime)s' with clp_logging timestamp format"]
+            [f"{WARN_PREFIX} replacing '%(asctime)s' with clp_logging timestamp format"]
         )
 
     def test_time_format_in_middle(self) -> None:
         fmt: str = "[%(levelname)s] %(asctime)s %(message)s"
         self.clp_handler.setFormatter(logging.Formatter(fmt))
         self.logger.info("format has %(asctime)s in the middle")
-        self.assert_clp_logs([WARN_PREFIX + f"replacing '{fmt}' with '{DEFAULT_LOG_FORMAT}'"])
+        self.assert_clp_logs([f"{WARN_PREFIX} replacing '{fmt}' with '{DEFAULT_LOG_FORMAT}'"])
 
     def test_time_format_missing(self) -> None:
         self.clp_handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
         self.raw_handler.setFormatter(logging.Formatter(" [%(levelname)s] %(message)s"))
         self.logger.info("no asctime in format")
-        self.assert_clp_logs([WARN_PREFIX + "prepending clp_logging timestamp to formatter"])
+        self.assert_clp_logs([f"{WARN_PREFIX} prepending clp_logging timestamp to formatter"])
 
 
 class TestCLPHandlerBase(TestCLPBase):
