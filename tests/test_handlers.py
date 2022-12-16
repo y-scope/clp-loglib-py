@@ -9,7 +9,13 @@ from typing import IO, List, Optional
 
 import dateutil.parser
 
-from clp_logging.handlers import CLPFileHandler, CLPSockHandler, CLPStreamHandler
+from clp_logging.handlers import (
+    CLPBaseHandler,
+    CLPFileHandler,
+    CLPSockHandler,
+    CLPStreamHandler,
+    DEFAULT_LOG_FORMAT,
+)
 from clp_logging.readers import CLPFileReader
 
 LOG_DIR: Path = Path("unittest-logs")
@@ -24,6 +30,7 @@ class DtStreamHandler(logging.StreamHandler):
     def __init__(self, stream: IO[str]) -> None:
         super().__init__(stream)
         self.timezone: Optional[tzinfo] = datetime.now().astimezone().tzinfo
+        self.formatter: logging.Formatter = logging.Formatter(DEFAULT_LOG_FORMAT)
 
     # override
     def emit(self, record: logging.LogRecord) -> None:
@@ -89,12 +96,8 @@ class TestCLPBase(unittest.TestCase):
         self.logger: logging.Logger = logging.getLogger(self.id())
         self.logger.setLevel(logging.INFO)
 
-        fmt: str = " [%(levelname)s(%(levelno)s)] %(message)s"
-        self.clp_handler.setFormatter(logging.Formatter(fmt))
-        self.logger.addHandler(self.clp_handler)
-
         self.raw_handler: DtFileHandler = DtFileHandler(self.raw_log_path)
-        self.raw_handler.setFormatter(logging.Formatter(fmt))
+        self.logger.addHandler(self.clp_handler)
         self.logger.addHandler(self.raw_handler)
 
     def close(self) -> None:
@@ -102,12 +105,13 @@ class TestCLPBase(unittest.TestCase):
         self.logger.removeHandler(self.clp_handler)
         self.logger.removeHandler(self.raw_handler)
 
-    def compare_output(self) -> None:
+    def compare_all_logs(self) -> None:
         self.close()
-
         clp_logs: List[str] = self.read_clp()
         raw_logs: List[str] = self.read_raw()
+        self.compare_logs(clp_logs, raw_logs)
 
+    def compare_logs(self, clp_logs: List[str], raw_logs: List[str]) -> None:
         for clp_log, raw_log in zip(clp_logs, raw_logs):
             # Assume logs are always formatted in ISO timestamp at beginning
             # Timestamp difference less than 2ms is close enough, but message
@@ -124,35 +128,65 @@ class TestCLPBase(unittest.TestCase):
             self.assertAlmostEqual(clp_timestamp, raw_timestamp, delta=timedelta(milliseconds=2))
             self.assertEqual(clp_msg, raw_msg)
 
+    def assert_clp_logs(self, expected_logs: List[str]) -> None:
+        self.close()
+        clp_logs: List[str] = self.read_clp()
+        for clp_log, expected_log in zip(clp_logs, expected_logs):
+            clp_msg: str = " ".join(clp_log.split()[2:])
+            self.assertEqual(clp_msg, expected_log)
+        self.compare_logs(clp_logs[len(expected_logs):], self.read_raw())
+
+
+class TestCLPInitBase(TestCLPBase):
+    def test_start_time(self) -> None:
+        self.clp_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+        self.raw_handler.setFormatter(logging.Formatter(" [%(levelname)s] %(message)s"))
+        self.logger.info("format starts with %(asctime)s")
+        self.assert_clp_logs(["[WARN][clp_logging] replacing \'%(asctime)s\' with clp_logging timestamp"])
+
+    def test_bad_time(self) -> None:
+        fmt: str = "[%(levelname)s] %(asctime)s %(message)s"
+        self.clp_handler.setFormatter(logging.Formatter(fmt))
+        self.logger.info("format has %(asctime)s in the middle")
+        self.assert_clp_logs([f"[WARN][clp_logging] replacing \'{fmt}\' with \'{DEFAULT_LOG_FORMAT}\'"])
+
+    def test_no_time(self) -> None:
+        self.clp_handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+        self.raw_handler.setFormatter(logging.Formatter(" [%(levelname)s] %(message)s"))
+        self.logger.info("no asctime in format")
+        self.assert_clp_logs(["[WARN][clp_logging] prepending clp_logging timestamp to formatter"])
+
+
+class TestCLPHandlerBase(TestCLPBase):
     def test_static(self) -> None:
         self.logger.info("static text log one")
         self.logger.info("static text log two")
-        self.compare_output()
+        self.compare_all_logs()
 
     def test_int(self) -> None:
         self.logger.info("int 1234")
         self.logger.info("-int -1234")
-        self.compare_output()
+        self.compare_all_logs()
 
     def test_float(self) -> None:
         self.logger.info("float 12.34")
         self.logger.info("-float -12.34")
-        self.compare_output()
+        self.compare_all_logs()
 
     def test_dict(self) -> None:
         self.logger.info("textint test1234")
         self.logger.info("texteq=var")
         self.logger.info(f">32bit int: {2**32}")
-        self.compare_output()
+        self.compare_all_logs()
 
     def test_combo(self) -> None:
         self.logger.info("zxcvbn 1234 asdfgh 12.34 qwerty")
         self.logger.info("zxcvbn -1234 asdfgh -12.34 qwerty")
         self.logger.info("zxcvbn foo=bar asdfgh foobar=var321 qwerty")
-        self.compare_output()
+        self.compare_all_logs()
 
 
-class TestCLPSockHandler(TestCLPBase):
+class TestCLPSockHandler(TestCLPHandlerBase):
     # override
     def setUp(self) -> None:
         super().setUp()
@@ -179,7 +213,7 @@ class TestCLPSockHandler(TestCLPBase):
             self.sock_path.unlink()
 
 
-class TestCLPStreamHandler(TestCLPBase):
+class TestCLPStreamHandler(TestCLPHandlerBase, TestCLPInitBase):
     # override
     def setUp(self) -> None:
         super().setUp()

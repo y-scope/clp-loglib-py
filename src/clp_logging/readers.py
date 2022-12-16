@@ -4,6 +4,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import IO, Iterator, List, Match, Optional, Type, Union
 
+from sys import stdout
 from zstandard import ZstdDecompressor, ZstdDecompressionReader
 
 from clp_logging.decoder import CLPDecoder
@@ -59,7 +60,7 @@ class Log:
         Populate the `variables`, `msg`, and `log` fields by decoding the
         encoded `_logtype and `_vars`.
         :param timestamp_format: Currently ignored due to compatibility issues
-        with other language libraries. (`datatime.isoformat` is always used.)
+        with other language libraries. (`datetime.isoformat` is always used.)
         :param timezone: Timezone to use when creating the timestamp from Unix
         epoch time.
         :return: 0 on success, < 0 on error
@@ -338,3 +339,7 @@ class CLPFileReader(CLPStreamReader):
     def __init__(self, fpath: Path) -> None:
         self.path: Path = fpath
         super().__init__(open(fpath, "rb"))
+
+    def dump(self) -> None:
+        for log in self:
+            stdout.write(log.log)

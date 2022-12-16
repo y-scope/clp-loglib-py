@@ -1,3 +1,4 @@
+from abc import ABCMeta, abstractmethod
 import logging
 import os
 import time
@@ -14,6 +15,8 @@ from zstandard import ZstdCompressor, ZstdCompressionWriter
 
 from clp_logging.encoder import CLPEncoder
 from clp_logging.protocol import EOF_CHAR
+
+DEFAULT_LOG_FORMAT: str = " %(levelname)s %(name)s %(message)s"
 
 
 def _init_timeinfo(fmt: Optional[str], tz: Optional[str]) -> Tuple[str, str]:
@@ -36,15 +39,55 @@ def _init_timeinfo(fmt: Optional[str], tz: Optional[str]) -> Tuple[str, str]:
     return fmt, tz
 
 
-def _set_formatter(handler: logging.Handler, formatter: Optional[logging.Formatter]) -> None:
-    """
-    Check user formatter and remove any timestamp token to avoid double
-    printing the timestamp.
-    """
-    if formatter and formatter._fmt and formatter._style:
-        formatter._fmt = formatter._fmt.replace("%(asctime)s", "")
-        formatter._style._fmt = formatter._fmt
-    handler.formatter = formatter
+class CLPBaseHandler(logging.Handler, metaclass=ABCMeta):
+    def __init__(self) -> None:
+        super().__init__()
+        self.formatter: logging.Formatter = logging.Formatter(DEFAULT_LOG_FORMAT)
+
+    # override
+    def setFormatter(self, fmt: Optional[logging.Formatter]) -> None:
+        """
+        Check user `fmt` and remove any timestamp token to avoid double
+        printing the timestamp.
+        """
+        if not fmt or not fmt._fmt:
+            return
+
+        fmt_str: str = fmt._fmt
+        style: str = ""
+        if "asctime" in fmt_str:
+            found: Optional[str] = None
+            if fmt_str.startswith("%(asctime)s "):
+                found = "%(asctime)s"
+                style = "%"
+            elif fmt_str.startswith("{asctime} "):
+                found = "{asctime}"
+                style = "{"
+            elif fmt_str.startswith("${asctime} "):
+                found = "${asctime}"
+                style = "$"
+
+            if found:
+                fmt._fmt = fmt_str.replace(found, "")
+                self.write(f" [WARN][clp_logging] replacing \'{found}\' with clp_logging timestamp")
+            else:
+                fmt._fmt = DEFAULT_LOG_FORMAT
+                self.write(f" [WARN][clp_logging] replacing \'{fmt_str}\' with \'{DEFAULT_LOG_FORMAT}\'")
+        else:
+            fmt._fmt = " " + fmt_str
+            self.write(" [WARN][clp_logging] prepending clp_logging timestamp to formatter")
+
+        fmt._style = fmt._style.__class__(fmt._fmt)
+        self.formatter = fmt
+
+
+    @abstractmethod
+    def write(self, msg: str) -> None:
+        raise NotImplementedError("write must be implemented by derived handlers")
+
+    @abstractmethod
+    def emit(self, record: logging.LogRecord) -> None:
+        raise NotImplementedError("emit must be implemented by derived handlers")
 
 
 class CLPSockListener:
@@ -157,7 +200,7 @@ class CLPSockListener:
         return pid
 
 
-class CLPSockHandler(logging.Handler):
+class CLPSockHandler(CLPBaseHandler):
     """
     Similar to `logging.Handler.SocketHandler`, but the log is written to the
     socket in CLP IR encoding rather than bytes. It is also simplified to only
@@ -206,18 +249,20 @@ class CLPSockHandler(logging.Handler):
                 raise
 
     # override
-    def setFormatter(self, fmt: Optional[logging.Formatter]) -> None:
-        _set_formatter(self, fmt)
-
-    # override
-    def emit(self, record: logging.LogRecord) -> None:
+    def write(self, msg: str) -> None:
         try:
             if self.closed:
                 raise RuntimeError("Socket already closed")
-            msg = self.format(record)
             self.sock.send(CLPEncoder.encode_message(msg.encode()))
         except Exception:
             self.sock.close()
+
+    # override
+    def emit(self, record: logging.LogRecord) -> None:
+        msg: str = self.format(record)
+        try:
+            self.write(msg)
+        except Exception:
             self.handleError(record)
 
     # override
@@ -240,7 +285,7 @@ class CLPSockHandler(logging.Handler):
         self.close()
 
 
-class CLPStreamHandler(logging.Handler):
+class CLPStreamHandler(CLPBaseHandler):
     """
     Similar to `logging.StreamHandler`, but the log is written to `stream`
     in CLP IR encoding rather than bytes or a string.
@@ -272,18 +317,18 @@ class CLPStreamHandler(logging.Handler):
         self.init(self.stream)
 
     # override
-    def setFormatter(self, fmt: Optional[logging.Formatter]) -> None:
-        _set_formatter(self, fmt)
+    def write(self, msg: str) -> None:
+        if self.closed:
+            raise RuntimeError("Stream already closed")
+        clp_msg: bytearray = CLPEncoder.encode_message(msg.encode())
+        self.last_timestamp_ms = CLPEncoder.encode_timestamp(self.last_timestamp_ms, clp_msg)
+        self.zstream.write(clp_msg)
 
     # override
     def emit(self, record: logging.LogRecord) -> None:
+        msg: str = self.format(record)
         try:
-            if self.closed:
-                raise RuntimeError("Stream already closed")
-            msg: str = self.format(record)
-            clp_msg: bytearray = CLPEncoder.encode_message(msg.encode())
-            self.last_timestamp_ms = CLPEncoder.encode_timestamp(self.last_timestamp_ms, clp_msg)
-            self.zstream.write(clp_msg)
+            self.write(msg)
         except Exception:
             self.handleError(record)
 
