@@ -15,6 +15,7 @@ from clp_logging.handlers import (
     CLPSockHandler,
     CLPStreamHandler,
     DEFAULT_LOG_FORMAT,
+    WARN_PREFIX,
 )
 from clp_logging.readers import CLPFileReader
 
@@ -134,7 +135,7 @@ class TestCLPBase(unittest.TestCase):
         for clp_log, expected_log in zip(clp_logs, expected_logs):
             clp_msg: str = " ".join(clp_log.split()[2:])
             self.assertEqual(clp_msg, expected_log)
-        self.compare_logs(clp_logs[len(expected_logs):], self.read_raw())
+        self.compare_logs(clp_logs[len(expected_logs) :], self.read_raw())
 
 
 class TestCLPInitBase(TestCLPBase):
@@ -142,19 +143,21 @@ class TestCLPInitBase(TestCLPBase):
         self.clp_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
         self.raw_handler.setFormatter(logging.Formatter(" [%(levelname)s] %(message)s"))
         self.logger.info("format starts with %(asctime)s")
-        self.assert_clp_logs(["[WARN][clp_logging] replacing \'%(asctime)s\' with clp_logging timestamp"])
+        self.assert_clp_logs(
+            [WARN_PREFIX + "replacing '%(asctime)s' with clp_logging timestamp format"]
+        )
 
     def test_bad_time(self) -> None:
         fmt: str = "[%(levelname)s] %(asctime)s %(message)s"
         self.clp_handler.setFormatter(logging.Formatter(fmt))
         self.logger.info("format has %(asctime)s in the middle")
-        self.assert_clp_logs([f"[WARN][clp_logging] replacing \'{fmt}\' with \'{DEFAULT_LOG_FORMAT}\'"])
+        self.assert_clp_logs([WARN_PREFIX + f"replacing '{fmt}' with '{DEFAULT_LOG_FORMAT}'"])
 
     def test_no_time(self) -> None:
         self.clp_handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
         self.raw_handler.setFormatter(logging.Formatter(" [%(levelname)s] %(message)s"))
         self.logger.info("no asctime in format")
-        self.assert_clp_logs(["[WARN][clp_logging] prepending clp_logging timestamp to formatter"])
+        self.assert_clp_logs([WARN_PREFIX + "prepending clp_logging timestamp to formatter"])
 
 
 class TestCLPHandlerBase(TestCLPBase):

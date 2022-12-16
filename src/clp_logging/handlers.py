@@ -17,6 +17,7 @@ from clp_logging.encoder import CLPEncoder
 from clp_logging.protocol import EOF_CHAR
 
 DEFAULT_LOG_FORMAT: str = " %(levelname)s %(name)s %(message)s"
+WARN_PREFIX: str = "[WARN][clp_logging]"
 
 
 def _init_timeinfo(fmt: Optional[str], tz: Optional[str]) -> Tuple[str, str]:
@@ -69,21 +70,23 @@ class CLPBaseHandler(logging.Handler, metaclass=ABCMeta):
 
             if found:
                 fmt._fmt = fmt_str.replace(found, "")
-                self.write(f" [WARN][clp_logging] replacing \'{found}\' with clp_logging timestamp")
+                self._warn(f"replacing '{found}' with clp_logging timestamp format")
             else:
                 fmt._fmt = DEFAULT_LOG_FORMAT
-                self.write(f" [WARN][clp_logging] replacing \'{fmt_str}\' with \'{DEFAULT_LOG_FORMAT}\'")
+                self._warn(f"replacing '{fmt_str}' with '{DEFAULT_LOG_FORMAT}'")
         else:
             fmt._fmt = " " + fmt_str
-            self.write(" [WARN][clp_logging] prepending clp_logging timestamp to formatter")
+            self._warn("prepending clp_logging timestamp to formatter")
 
         fmt._style = fmt._style.__class__(fmt._fmt)
         self.formatter = fmt
 
+    def _warn(self, msg: str) -> None:
+        self._write(" " + WARN_PREFIX + msg)
 
     @abstractmethod
-    def write(self, msg: str) -> None:
-        raise NotImplementedError("write must be implemented by derived handlers")
+    def _write(self, msg: str) -> None:
+        raise NotImplementedError("_write must be implemented by derived handlers")
 
     @abstractmethod
     def emit(self, record: logging.LogRecord) -> None:
@@ -249,7 +252,7 @@ class CLPSockHandler(CLPBaseHandler):
                 raise
 
     # override
-    def write(self, msg: str) -> None:
+    def _write(self, msg: str) -> None:
         try:
             if self.closed:
                 raise RuntimeError("Socket already closed")
@@ -261,7 +264,7 @@ class CLPSockHandler(CLPBaseHandler):
     def emit(self, record: logging.LogRecord) -> None:
         msg: str = self.format(record)
         try:
-            self.write(msg)
+            self._write(msg)
         except Exception:
             self.handleError(record)
 
@@ -317,7 +320,7 @@ class CLPStreamHandler(CLPBaseHandler):
         self.init(self.stream)
 
     # override
-    def write(self, msg: str) -> None:
+    def _write(self, msg: str) -> None:
         if self.closed:
             raise RuntimeError("Stream already closed")
         clp_msg: bytearray = CLPEncoder.encode_message(msg.encode())
@@ -328,7 +331,7 @@ class CLPStreamHandler(CLPBaseHandler):
     def emit(self, record: logging.LogRecord) -> None:
         msg: str = self.format(record)
         try:
-            self.write(msg)
+            self._write(msg)
         except Exception:
             self.handleError(record)
 
