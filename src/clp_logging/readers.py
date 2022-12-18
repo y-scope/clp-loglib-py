@@ -4,7 +4,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import IO, Iterator, List, Match, Optional, Type, Union
 
-from sys import stdout
+from sys import stderr
 from zstandard import ZstdDecompressor, ZstdDecompressionReader
 
 from clp_logging.decoder import CLPDecoder
@@ -277,8 +277,10 @@ class CLPBaseReader(metaclass=ABCMeta):
             valid: int = len(self.view) - offset
             self.view[:valid] = self.view[offset:]
             if valid > len(self._buf) // 2:
+                tmp = bytearray(len(self._buf) * 2)
+                tmp[:valid] = self.view
                 self.view.release()
-                self._buf = bytearray(len(self._buf) * 2)
+                self._buf = tmp
                 self.view = memoryview(self._buf)
             self.pos = 0
             offset = 0
@@ -287,7 +289,8 @@ class CLPBaseReader(metaclass=ABCMeta):
                 return -1
 
     def _store_token(self, log: Log, token_type: int, token: bytes) -> None:
-        """Store `token` into the corresponding field in `log` based on the
+        """
+        Store `token` into the corresponding field in `log` based on the
         `token_type`. Bytes in the raw log that match special encoding bytes
         were escaped, so we must unescape any set of bytes copied directly from
         `_buf` (dict variables and logtype).
@@ -312,7 +315,8 @@ class CLPBaseReader(metaclass=ABCMeta):
 
 
 class CLPStreamReader(CLPBaseReader):
-    """Simple stream reader that will decompress the Zstandard stream
+    """
+    Simple stream reader that will decompress the Zstandard stream
     :param chunk_size: initial size of `CLPBaseReader._buf` for reading
     """
 
@@ -323,7 +327,8 @@ class CLPStreamReader(CLPBaseReader):
         self.zstream: ZstdDecompressionReader = self.dctx.stream_reader(self.stream)
 
     def readinto_buf(self, offset: int) -> int:
-        """Use Zstandard to decompress the CLP IR stream.
+        """
+        Use Zstandard to decompress the CLP IR stream.
         :return: Bytes read (0 for EOF), < 0 on error
         """
         return self.zstream.readinto(self.view[offset:])
@@ -336,10 +341,10 @@ class CLPStreamReader(CLPBaseReader):
 class CLPFileReader(CLPStreamReader):
     """Wrapper class that calls `open` for convenience."""
 
-    def __init__(self, fpath: Path) -> None:
+    def __init__(self, fpath: Path, chunk_size: int = 4096) -> None:
         self.path: Path = fpath
-        super().__init__(open(fpath, "rb"))
+        super().__init__(open(fpath, "rb"), chunk_size)
 
     def dump(self) -> None:
         for log in self:
-            stdout.write(log.log)
+            stderr.write(log.log)
