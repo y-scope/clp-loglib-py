@@ -164,10 +164,15 @@ class CLPSockListener:
                 i: int = 0
                 while i < size:
                     read = conn.recv_into(view[i:], size)
+                    if read == 0:
+                        raise OSError("handler conn.recv_into return 0 before finishing")
                     i += read
                 log_queue.put(buf)
             except socket.timeout:  # replaced with TimeoutError in python 3.10
                 pass
+            except OSError:
+                conn.close()
+                raise
         return 0
 
     @staticmethod
