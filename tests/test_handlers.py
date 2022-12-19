@@ -23,7 +23,8 @@ LOG_DIR: Path = Path("unittest-logs")
 
 
 class DtStreamHandler(logging.StreamHandler):
-    """`logging` handler using `datetime` for the timestamp rather than `time`
+    """
+    `logging` handler using `datetime` for the timestamp rather than `time`
     (used internally by `logging`). Necessary for correct comparison with CLP
     log handlers.
     """
@@ -55,7 +56,8 @@ class DtFileHandler(DtStreamHandler):
 
 
 class TestCLPBase(unittest.TestCase):
-    """Functionally abstract as we use `load_tests` to avoid adding
+    """
+    Functionally abstract as we use `load_tests` to avoid adding
     `TestCLPBase` itself to the test suite. This allows us to share tests
     between different handlers.
     However, we cannot mark it as abstract as `unittest` will still `__init__`
@@ -113,9 +115,10 @@ class TestCLPBase(unittest.TestCase):
         self.compare_logs(clp_logs, raw_logs)
 
     def compare_logs(self, clp_logs: List[str], raw_logs: List[str]) -> None:
+        self.assertEqual(len(clp_logs), len(raw_logs))
         for clp_log, raw_log in zip(clp_logs, raw_logs):
             # Assume logs are always formatted in ISO timestamp at beginning
-            # Timestamp difference less than 2ms is close enough, but message
+            # Timestamp difference less than 8ms is close enough, but message
             # must be the same
             clp_log_split: List[str] = clp_log.split()
             raw_log_split: List[str] = raw_log.split()
@@ -126,7 +129,7 @@ class TestCLPBase(unittest.TestCase):
             clp_timestamp: datetime = dateutil.parser.isoparse(clp_time_str)
             raw_timestamp: datetime = dateutil.parser.isoparse(raw_time_str)
 
-            self.assertAlmostEqual(clp_timestamp, raw_timestamp, delta=timedelta(milliseconds=2))
+            self.assertAlmostEqual(clp_timestamp, raw_timestamp, delta=timedelta(milliseconds=8))
             self.assertEqual(clp_msg, raw_msg)
 
     def assert_clp_logs(self, expected_logs: List[str]) -> None:
@@ -188,6 +191,13 @@ class TestCLPHandlerBase(TestCLPBase):
         self.logger.info("zxcvbn 1234 asdfgh 12.34 qwerty")
         self.logger.info("zxcvbn -1234 asdfgh -12.34 qwerty")
         self.logger.info("zxcvbn foo=bar asdfgh foobar=var321 qwerty")
+        self.compare_all_logs()
+
+    def test_long_log(self) -> None:
+        long_even_log: str = "hi" * (1024 * 1024)  # 2mb
+        long_odd_log: str = "hi" * (1024 * 1024 - 1)
+        self.logger.info(long_even_log)
+        self.logger.info(long_odd_log)
         self.compare_all_logs()
 
 
