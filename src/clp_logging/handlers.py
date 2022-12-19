@@ -273,7 +273,7 @@ class CLPSockListener:
                 Thread(
                     target=CLPSockListener._handle_client, args=(conn, log_queue), daemon=False
                 ).start()
-            except socket.timeout:  # replaced with TimeoutError in python 3.10
+            except socket.timeout:
                 pass
         sock.close()
         sock_path.unlink()
