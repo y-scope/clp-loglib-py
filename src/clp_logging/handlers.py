@@ -32,9 +32,9 @@ def _init_timeinfo(fmt: Optional[str], tz: Optional[str]) -> Tuple[str, str]:
     to compatibility issues between language time libraries.
     (`datatime.isoformat` is always used for the timestamp format in python
     readers.)
-    :param fmt: Timestamp format written in preamble to be use when generating
+    :param fmt: Timestamp format written in preamble to be used when generating
     the logs with a reader.
-    :param tz: Timezone written in preamble to be use when generating the
+    :param tz: Timezone written in preamble to be used when generating the
     timestamp from Unix epoch time.
     """
     if not fmt:
@@ -165,10 +165,10 @@ class CLPSockListener:
                 while i < size:
                     read = conn.recv_into(view[i:], size)
                     if read == 0:
-                        raise OSError("handler conn.recv_into return 0 before finishing")
+                        raise OSError("handler conn.recv_into returned 0 before finishing")
                     i += read
                 log_queue.put(buf)
-            except socket.timeout:  # replaced with TimeoutError in python 3.10
+            except socket.timeout:  # TODO replaced with TimeoutError in python 3.10
                 pass
             except OSError:
                 conn.close()
@@ -190,12 +190,12 @@ class CLPSockListener:
         :param log_path: Path to log file and used to derive socket name.
         :param log_queue: Queue with `CLPSockListener._handle_client` threads
         to write encoded messages.
-        :param timestamp_format: Timestamp format written in preamble to be use
-        when generating the logs with a reader.
-        :param timezone: Timezone written in preamble to be use when generating
-        the timestamp from Unix epoch time.
-        :param timeout: timeout to prevent `Queue.get` from never returning and
-        not closing properly on signal/EOF_CHAR.
+        :param timestamp_format: Timestamp format written in preamble to be
+        used when generating the logs with a reader.
+        :param timezone: Timezone written in preamble to be used when
+        generating the timestamp from Unix epoch time.
+        :param timeout: timeout in seconds to prevent `Queue.get` from never
+        returning and not closing properly on signal/EOF_CHAR.
         :return: 0 on successful exit
         """
         cctx: ZstdCompressor = ZstdCompressor()
@@ -238,12 +238,12 @@ class CLPSockListener:
         process that `_try_bind` has finished.
         :param log_path: Path to log file.
         :param sock_path: Path to socket file.
-        :param timestamp_format: Timestamp format written in preamble to be use
-        when generating the logs with a reader.
-        :param timezone: Timezone written in preamble to be use when generating
-        the timestamp from Unix epoch time.
-        :param timeout: timeout to prevent block operations from never
-        returning and not closing properly on signal/EOF_CHAR
+        :param timestamp_format: Timestamp format written in preamble to be
+        used when generating the logs with a reader.
+        :param timezone: Timezone written in preamble to be used when
+        generating the timestamp from Unix epoch time.
+        :param timeout: timeout in seconds to prevent block operations from
+        never returning and not closing properly on signal/EOF_CHAR
         :return: 0 on successful exit, -1 if `CLPSockListener._try_bind` fails
         """
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -292,12 +292,12 @@ class CLPSockListener:
         not return until the forked listener has either bound the socket
         or finished trying to.
         :param log_path: Path to log file and used to derive socket name.
-        :param timestamp_format: Timestamp format written in preamble to be use
-        when generating the logs with a reader.
-        :param timezone: Timezone written in preamble to be use when generating
-        the timestamp from Unix epoch time.
-        :param timeout: timeout to prevent block operations from never
-        returning and not closing properly on signal/EOF_CHAR
+        :param timestamp_format: Timestamp format written in preamble to be
+        used when generating the logs with a reader.
+        :param timezone: Timezone written in preamble to be used when
+        generating the timestamp from Unix epoch time.
+        :param timeout: timeout in seconds to prevent block operations from
+        never returning and not closing properly on signal/EOF_CHAR
         :return: child pid
         """
         sock_path: Path = log_path.with_suffix(".sock")
@@ -338,14 +338,16 @@ class CLPSockHandler(CLPBaseHandler):
         :param log_path: Path to log file written by `CLPSockListener` used to
         derive socket name.
         :param create_listener: If true and the handler could not connect to an
-        existing listener, CLPSockListener.fork is used to try and spawn one. This
-        is safe to be used by concurrent `CLPSockHandler` instances.
-        :param timestamp_format: Timestamp format written in preamble to be use when generating
-        the logs with a reader. (Only used when creating a listener.)
-        :param timezone: Timezone written in preamble to be use when generating the
-        timestamp from Unix epoch time. (Only used when creating a listener.)
-        :param timeout: timeout to prevent blocking operations from never
-        returning and not closing properly on signal/EOF_CHAR
+        existing listener, CLPSockListener.fork is used to try and spawn one.
+        This is safe to be used by concurrent `CLPSockHandler` instances.
+        :param timestamp_format: Timestamp format written in preamble to be
+        used when generating the logs with a reader. (Only used when creating a
+        listener.)
+        :param timezone: Timezone written in preamble to be used when
+        generating the timestamp from Unix epoch time. (Only used when creating
+        a listener.)
+        :param timeout: timeout in seconds to prevent blocking operations from
+        never returning and not closing properly on signal/EOF_CHAR
         """
         super().__init__()
         sock_path: Path = log_path.with_suffix(".sock")
@@ -375,7 +377,9 @@ class CLPSockHandler(CLPBaseHandler):
             clp_msg: bytearray = CLPEncoder.encode_message(msg.encode())
             size: int = len(clp_msg)
             if size > UINT_MAX:
-                raise NotImplementedError("Encoded message > unsigned int currently unsupported")
+                raise NotImplementedError(
+                    "Encoded message longer than UINT_MAX currently unsupported"
+                )
             sizeb: bytes = size.to_bytes(SIZEOF_INT, BYTE_ORDER)
             self.sock.sendall(sizeb)
             self.sock.sendall(clp_msg)
