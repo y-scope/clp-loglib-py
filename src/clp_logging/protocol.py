@@ -47,8 +47,9 @@ ESCAPE_CHAR: bytes = b"\\"
 # Thus these need to be updated manually if the escape character ever changes
 RE_UNESCAPE: Pattern[bytes] = re.compile(rb"\\([\x11\x12\x13\\])")
 RE_SUB_UNESCAPE: bytes = rb"\1"
-RE_DELIM_VAR: Pattern[bytes] = re.compile(rb"([\x11\x12\x13\\])")
-RE_SUB_DELIM_VAR: bytes = rb"\\\1"
+RE_ESCAPE: Pattern[bytes] = re.compile(rb"([\x11\x12\x13\\])")
+RE_SUB_ESCAPE: bytes = rb"\\\1"
+RE_DELIM_VAR: Pattern[bytes] = re.compile(rb"([\x11\x12\x13])")
 
 # 0x10-0x1f reserved for variable-related constants
 # 0x20-0x2f reserved for logtype-related constants

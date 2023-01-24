@@ -13,6 +13,7 @@ import sys
 from types import FrameType
 from typing import ClassVar, IO, Optional, Tuple, TypeVar
 
+import dateutil.tz
 from zstandard import ZstdCompressor, ZstdCompressionWriter
 
 from clp_logging.encoder import CLPEncoder
@@ -34,13 +35,17 @@ def _init_timeinfo(fmt: Optional[str], tz: Optional[str]) -> Tuple[str, str]:
     readers.)
     :param fmt: Timestamp format written in preamble to be used when generating
     the logs with a reader.
-    :param tz: Timezone written in preamble to be used when generating the
-    timestamp from Unix epoch time.
+    :param tz: Timezone in TZID format written in preamble to be used when
+    generating the timestamp from Unix epoch time.
     """
     if not fmt:
         fmt = "yyyy-MM-d H:m:s.A"
     if not tz:
-        tz = datetime.now().astimezone().strftime("%z")
+        tzf = dateutil.tz.gettz()
+        if tzf:
+            if tzf._filename == "/etc/localtime":
+                tzp = Path.resolve(Path(tzf._filename))
+            tz = "/".join([tzp.parent.name, tzp.name])
     return fmt, tz
 
 

@@ -89,7 +89,7 @@ class TestCLPBase(unittest.TestCase):
 
     def read_clp(self) -> List[str]:
         with CLPFileReader(self.clp_log_path) as logf:
-            return [log.log for log in logf]
+            return [log.formatted_msg for log in logf]
 
     def read_raw(self) -> List[str]:
         with open(self.raw_log_path, "r") as logf:
