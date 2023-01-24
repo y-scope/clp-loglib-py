@@ -58,25 +58,26 @@ class Log:
     def __str__(self) -> str:
         return self.formatted_msg
 
-    def _decode(self, timestamp_format: str, timezone: Optional[tzinfo]) -> int:
+    def _decode(self, timestamp_format: Optional[str], timezone: Optional[tzinfo]) -> int:
         """
         Populate the `variables`, `msg`, and `formatted_msg` fields by decoding
         the encoded `encoded_logtype and `encoded_variables`.
-        :param timestamp_format: Currently ignored due to compatibility issues
-        with other language libraries. (`datetime.isoformat` is always used.)
+        :param timestamp_format: If provided, used by `datetime.strftime` to
+        format the timestamp. If `None` then `datetime.isoformat` is used.
         :param timezone: Timezone to use when creating the timestamp from Unix
         epoch time.
         :return: 0 on success, < 0 on error
         """
-        self.logtype = RE_DELIM_VAR.sub(b"<var>", self.encoded_logtype).decode()
         var_delim_matchs: List[Match[bytes]] = list(RE_DELIM_VAR.finditer(self.encoded_logtype))
         if not len(self.encoded_variables) == len(var_delim_matchs):
             raise RuntimeError("Number of var delims in logtype does not match stored vars")
 
+        logtype: str = ""
         msg: str = ""
         pos: int = 0
         for i, var_delim_match in enumerate(var_delim_matchs):
             var_start: int = var_delim_match.start()
+            logtype += self.encoded_logtype[pos:var_start].decode()
             msg += self.encoded_logtype[pos:var_start].decode()
 
             var_delim: bytes = var_delim_match.group(0)
@@ -84,23 +85,31 @@ class Log:
             if var_delim == DELIM_DICT:
                 var_str = CLPDecoder.decode_dict(self.encoded_variables[i])
                 self.variables.append(var_str)
+                logtype += "<str>"
             elif var_delim == DELIM_INT:
                 var_int: int
                 var_int, var_str = CLPDecoder.decode_int(self.encoded_variables[i])
                 self.variables.append(var_int)
+                logtype += "<int>"
             elif var_delim == DELIM_FLOAT:
                 var_float: float
                 var_float, var_str = CLPDecoder.decode_float(self.encoded_variables[i])
                 self.variables.append(var_float)
+                logtype += "<float>"
             else:
                 raise RuntimeError("Unknown delimiter")
 
             msg += var_str
             pos = var_delim_match.end()
+        logtype += self.encoded_logtype[pos:].decode()
         msg += self.encoded_logtype[pos:].decode()
+        self.logtype = logtype
         self.msg = msg
         dt: datetime = datetime.fromtimestamp(self.timestamp_ms / 1000, timezone)
-        self.formatted_msg = dt.isoformat(sep=" ", timespec="milliseconds") + self.msg
+        if timestamp_format:
+            self.formatted_msg = dt.strftime(timestamp_format) + self.msg
+        else:
+            self.formatted_msg = dt.isoformat(sep=" ", timespec="milliseconds") + self.msg
         return 0
 
 
@@ -113,23 +122,25 @@ class CLPBaseReader(metaclass=ABCMeta):
     :param view: `memoryview` of `bytearray` to allow convenient slicing
     :param metadata: Metadata from CLP IR header
     :param last_timestamp_ms:
-    :param timestamp_format: Format read from CLP IR to use when creating
-    timestamps from epoch time (Currently unused)
+    :param timestamp_format: If provided, used by `datetime.strftime` to format
+    the timestamp. If `None` then `datetime.isoformat` is used.
     :param timezone: Timezone read from CLP IR to use when creating timestamps
     from epoch time
     :param pos: Current position in the `view`
     """
 
-    def __init__(self, chunk_size: int) -> None:
+    def __init__(self, timestamp_format: Optional[str], chunk_size: int) -> None:
         """
         Constructor
+        :param timestamp_format: Format optionally provided by user to format
+        timestamps from epoch time.
         :param chunk_size: initial size of `_buf` for reading
         """
         self._buf: bytearray = bytearray(chunk_size)
         self.view: memoryview = memoryview(self._buf)
         self.metadata: Optional[Metadata] = None
         self.last_timestamp_ms: int
-        self.timestamp_format: str
+        self.timestamp_format: Optional[str] = timestamp_format
         self.timezone: Optional[tzinfo]
         self.pos: int
 
@@ -153,7 +164,9 @@ class CLPBaseReader(metaclass=ABCMeta):
         self.metadata, self.pos = CLPDecoder.decode_preamble(self.view, 0)
         if self.metadata:
             self.last_timestamp_ms = int(self.metadata[METADATA_REFERENCE_TIMESTAMP_KEY])
-            self.timestamp_format = self.metadata[METADATA_TIMESTAMP_PATTERN_KEY]
+            # We do not use the timestamp pattern from the preamble as it may
+            # be from other languages and therefore incompatible.
+            # self.timestamp_format = self.metadata[METADATA_TIMESTAMP_PATTERN_KEY]
             self.timezone = dateutil.tz.gettz(self.metadata[METADATA_TZ_ID_KEY])
         return self.pos
 
@@ -305,7 +318,9 @@ class CLPBaseReader(metaclass=ABCMeta):
                 t = RE_DELIM_VAR_UNESCAPE.sub(RE_SUB_DELIM_VAR_UNESCAPE, t)
             log.encoded_variables.append(t)
         elif token_id == ID_LOGTYPE:
-            log.encoded_logtype = RE_DELIM_VAR_UNESCAPE.sub(RE_SUB_DELIM_VAR_UNESCAPE, bytes(token))
+            log.encoded_logtype = RE_DELIM_VAR_UNESCAPE.sub(
+                RE_SUB_DELIM_VAR_UNESCAPE, bytes(token)
+            )
         elif token_id == ID_TIMESTAMP:
             delta_ms: int = int.from_bytes(token, BYTE_ORDER, signed=True)
             log.timestamp_ms = self.last_timestamp_ms + delta_ms
@@ -318,11 +333,15 @@ class CLPBaseReader(metaclass=ABCMeta):
 class CLPStreamReader(CLPBaseReader):
     """
     Simple stream reader that will decompress the Zstandard stream
+    :param timestamp_format: Format optionally provided by user to format
+    timestamps from epoch time.
     :param chunk_size: initial size of `CLPBaseReader._buf` for reading
     """
 
-    def __init__(self, stream: IO[bytes], chunk_size: int = 4096) -> None:
-        super().__init__(chunk_size)
+    def __init__(
+        self, stream: IO[bytes], timestamp_format: Optional[str] = None, chunk_size: int = 4096
+    ) -> None:
+        super().__init__(timestamp_format, chunk_size)
         self.stream: IO[bytes] = stream
         self.dctx: ZstdDecompressor = ZstdDecompressor()
         self.zstream: ZstdDecompressionReader = self.dctx.stream_reader(self.stream)
@@ -342,9 +361,11 @@ class CLPStreamReader(CLPBaseReader):
 class CLPFileReader(CLPStreamReader):
     """Wrapper class that calls `open` for convenience."""
 
-    def __init__(self, fpath: Path, chunk_size: int = 4096) -> None:
+    def __init__(
+        self, fpath: Path, timestamp_format: Optional[str] = None, chunk_size: int = 4096
+    ) -> None:
         self.path: Path = fpath
-        super().__init__(open(fpath, "rb"), chunk_size)
+        super().__init__(open(fpath, "rb"), timestamp_format, chunk_size)
 
     def dump(self) -> None:
         for log in self:
