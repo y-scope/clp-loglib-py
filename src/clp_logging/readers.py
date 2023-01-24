@@ -79,6 +79,7 @@ class Log:
             var_start: int = var_delim_match.start()
             logtype += self.encoded_logtype[pos:var_start].decode()
             msg += self.encoded_logtype[pos:var_start].decode()
+            pos = var_delim_match.end()
 
             var_delim: bytes = var_delim_match.group(0)
             var_str: str
@@ -100,7 +101,6 @@ class Log:
                 raise RuntimeError("Unknown delimiter")
 
             msg += var_str
-            pos = var_delim_match.end()
         logtype += self.encoded_logtype[pos:].decode()
         msg += self.encoded_logtype[pos:].decode()
         self.logtype = logtype
