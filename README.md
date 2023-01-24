@@ -104,13 +104,14 @@ CLPSockHandler(Path("example.clp.zst")).stop_listener()
 
 #### Example code: CLPFileReader
 ```python
-import logging
 from pathlib import Path
+from typing import List
+
 from clp_logging.readers import CLPFileReader, Log
 
 # create a list of all Log objects
 log_objects: List[Log] = []
-with CLPFileReader(Path("example.clp.zst") as clp_reader:
+with CLPFileReader(Path("example.clp.zst")) as clp_reader:
     for log in clp_reader:
         log_objects.append(log)
 ```
@@ -134,7 +135,7 @@ result in a test reporting a false positive error.
 1. Create and enter a virtual environment:
     `python -m venv venv; .  ./venv/bin/activate`
 2. Install:
-    `pip install dist/clp_logging-0.0.1-py3-none-any.whl` or `pip install -e .`
+    `pip install dist/clp_logging-*-py3-none-any.whl` or `pip install -e .`
 3. Run unittest:
     `python -m unittest -bv`
 

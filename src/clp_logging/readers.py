@@ -4,6 +4,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import IO, Iterator, List, Match, Optional, Type, Union
 
+import dateutil.tz
 from sys import stderr
 from zstandard import ZstdDecompressor, ZstdDecompressionReader
 
@@ -22,8 +23,8 @@ from clp_logging.protocol import (
     METADATA_REFERENCE_TIMESTAMP_KEY,
     METADATA_TIMESTAMP_PATTERN_KEY,
     METADATA_TZ_ID_KEY,
-    RE_UNESCAPE,
-    RE_SUB_UNESCAPE,
+    RE_DELIM_VAR_UNESCAPE,
+    RE_SUB_DELIM_VAR_UNESCAPE,
     VAR_COMPACT_ENCODING,
     RE_DELIM_VAR,
 )
@@ -36,67 +37,70 @@ class Log:
     decoded fields after `_decode` has been called. `Log` objects should be
     created using reader iterators to ensure they are valid.
     :param timestamp_ms: Time in ms since Unix epoch
-    :param _logtype: Encoded logtype
-    :param _vars: Encoded and untyped variables
-    :param variables: Yyped and decoded variables
+    :param encoded_logtype: Encoded logtype
+    :param encoded_variables: Encoded and untyped variables
+    :param variables: Typed and decoded variables
     :param msg: Complete decoded log with no `Formatter` components (`msg`
     field of a `logging.record`)
-    :param log: Complete decoded log with all `Formatter` components
+    :param formatted_msg: Complete decoded log with all `Formatter` components
     """
 
     def __init__(self) -> None:
         self.timestamp_ms: int
-        self._logtype: bytes
-        self._vars: List[bytes] = []
+        self.encoded_logtype: bytes
+        self.encoded_variables: List[bytes] = []
+
+        self.logtype: str
         self.variables: List[Union[int, float, str]] = []
         self.msg: str
-        self.log: str
+        self.formatted_msg: str
 
     def __str__(self) -> str:
-        return self.log
+        return self.formatted_msg
 
     def _decode(self, timestamp_format: str, timezone: Optional[tzinfo]) -> int:
         """
-        Populate the `variables`, `msg`, and `log` fields by decoding the
-        encoded `_logtype and `_vars`.
+        Populate the `variables`, `msg`, and `formatted_msg` fields by decoding
+        the encoded `encoded_logtype and `encoded_variables`.
         :param timestamp_format: Currently ignored due to compatibility issues
         with other language libraries. (`datetime.isoformat` is always used.)
         :param timezone: Timezone to use when creating the timestamp from Unix
         epoch time.
         :return: 0 on success, < 0 on error
         """
-        var_delim_matchs: List[Match[bytes]] = list(RE_DELIM_VAR.finditer(self._logtype))
-        if not len(self._vars) == len(var_delim_matchs):
+        self.logtype = RE_DELIM_VAR.sub(b"<var>", self.encoded_logtype).decode()
+        var_delim_matchs: List[Match[bytes]] = list(RE_DELIM_VAR.finditer(self.encoded_logtype))
+        if not len(self.encoded_variables) == len(var_delim_matchs):
             raise RuntimeError("Number of var delims in logtype does not match stored vars")
 
         msg: str = ""
         pos: int = 0
         for i, var_delim_match in enumerate(var_delim_matchs):
             var_start: int = var_delim_match.start()
-            msg += self._logtype[pos:var_start].decode()
+            msg += self.encoded_logtype[pos:var_start].decode()
 
             var_delim: bytes = var_delim_match.group(0)
             var_str: str
             if var_delim == DELIM_DICT:
-                var_str = CLPDecoder.decode_dict(self._vars[i])
+                var_str = CLPDecoder.decode_dict(self.encoded_variables[i])
                 self.variables.append(var_str)
             elif var_delim == DELIM_INT:
                 var_int: int
-                var_int, var_str = CLPDecoder.decode_int(self._vars[i])
+                var_int, var_str = CLPDecoder.decode_int(self.encoded_variables[i])
                 self.variables.append(var_int)
             elif var_delim == DELIM_FLOAT:
                 var_float: float
-                var_float, var_str = CLPDecoder.decode_float(self._vars[i])
+                var_float, var_str = CLPDecoder.decode_float(self.encoded_variables[i])
                 self.variables.append(var_float)
             else:
                 raise RuntimeError("Unknown delimiter")
 
             msg += var_str
             pos = var_delim_match.end()
-        msg += self._logtype[pos:].decode()
+        msg += self.encoded_logtype[pos:].decode()
         self.msg = msg
         dt: datetime = datetime.fromtimestamp(self.timestamp_ms / 1000, timezone)
-        self.log = dt.isoformat(sep=" ", timespec="milliseconds") + self.msg
+        self.formatted_msg = dt.isoformat(sep=" ", timespec="milliseconds") + self.msg
         return 0
 
 
@@ -150,7 +154,7 @@ class CLPBaseReader(metaclass=ABCMeta):
         if self.metadata:
             self.last_timestamp_ms = int(self.metadata[METADATA_REFERENCE_TIMESTAMP_KEY])
             self.timestamp_format = self.metadata[METADATA_TIMESTAMP_PATTERN_KEY]
-            self.timezone = datetime.strptime(self.metadata[METADATA_TZ_ID_KEY], "%z").tzinfo
+            self.timezone = dateutil.tz.gettz(self.metadata[METADATA_TZ_ID_KEY])
         return self.pos
 
     @abstractmethod
@@ -246,9 +250,6 @@ class CLPBaseReader(metaclass=ABCMeta):
         :return: index read to in `view` (start of next log), 0 on EOF, < 0 on
         error
         """
-        variables: List[bytes] = []
-        logtype: bytes
-
         while True:
             while True:
                 token_type: int
@@ -301,10 +302,10 @@ class CLPBaseReader(metaclass=ABCMeta):
             t: bytes = bytes(token)
             if token_type != VAR_COMPACT_ENCODING[0]:
                 # remove any escaping done during encoding
-                t = RE_UNESCAPE.sub(RE_SUB_UNESCAPE, t)
-            log._vars.append(t)
+                t = RE_DELIM_VAR_UNESCAPE.sub(RE_SUB_DELIM_VAR_UNESCAPE, t)
+            log.encoded_variables.append(t)
         elif token_id == ID_LOGTYPE:
-            log._logtype = RE_UNESCAPE.sub(RE_SUB_UNESCAPE, token)
+            log.encoded_logtype = RE_DELIM_VAR_UNESCAPE.sub(RE_SUB_DELIM_VAR_UNESCAPE, bytes(token))
         elif token_id == ID_TIMESTAMP:
             delta_ms: int = int.from_bytes(token, BYTE_ORDER, signed=True)
             log.timestamp_ms = self.last_timestamp_ms + delta_ms
@@ -347,4 +348,4 @@ class CLPFileReader(CLPStreamReader):
 
     def dump(self) -> None:
         for log in self:
-            stderr.write(log.log)
+            stderr.write(log.formatted_msg)

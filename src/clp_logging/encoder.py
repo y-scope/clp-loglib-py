@@ -22,8 +22,8 @@ from clp_logging.protocol import (
     METADATA_TZ_ID_KEY,
     METADATA_VERSION_KEY,
     METADATA_VERSION_VALUE,
-    RE_DELIM_VAR,
-    RE_SUB_DELIM_VAR,
+    RE_DELIM_VAR_ESCAPE,
+    RE_SUB_DELIM_VAR_ESCAPE,
     TIMESTAMP_DELTA_BYTE,
     TIMESTAMP_DELTA_SHORT,
     TIMESTAMP_DELTA_INT,
@@ -73,8 +73,8 @@ class CLPEncoder:
         with each message.
         :param timestamp_format: Timestamp format to be use when generating the
         logs with a reader.
-        :param timezone: Timezone to be use when generating the timestamp from
-        Unix epoch time.
+        :param timezone: Timezone in TZID format to be use when generating the
+        timestamp from Unix epoch time.
         :raises NotImplementedError: If metadata length too large
         :return: The encoded preamble
         """
@@ -293,7 +293,7 @@ class CLPEncoder:
         `logging.LogRecord`
         """
         # Escape dangerous bytes
-        msg = RE_DELIM_VAR.sub(RE_SUB_DELIM_VAR, msg)
+        msg = RE_DELIM_VAR_ESCAPE.sub(RE_SUB_DELIM_VAR_ESCAPE, msg)
 
         clp_msg: bytearray = bytearray()
         logtype: bytearray = bytearray()
