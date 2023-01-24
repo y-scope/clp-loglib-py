@@ -22,8 +22,8 @@ from clp_logging.protocol import (
     METADATA_TZ_ID_KEY,
     METADATA_VERSION_KEY,
     METADATA_VERSION_VALUE,
-    RE_ESCAPE,
-    RE_SUB_ESCAPE,
+    RE_DELIM_VAR_ESCAPE,
+    RE_SUB_DELIM_VAR_ESCAPE,
     TIMESTAMP_DELTA_BYTE,
     TIMESTAMP_DELTA_SHORT,
     TIMESTAMP_DELTA_INT,
@@ -293,7 +293,7 @@ class CLPEncoder:
         `logging.LogRecord`
         """
         # Escape dangerous bytes
-        msg = RE_ESCAPE.sub(RE_SUB_ESCAPE, msg)
+        msg = RE_DELIM_VAR_ESCAPE.sub(RE_SUB_DELIM_VAR_ESCAPE, msg)
 
         clp_msg: bytearray = bytearray()
         logtype: bytearray = bytearray()

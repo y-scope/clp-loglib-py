@@ -23,8 +23,8 @@ from clp_logging.protocol import (
     METADATA_REFERENCE_TIMESTAMP_KEY,
     METADATA_TIMESTAMP_PATTERN_KEY,
     METADATA_TZ_ID_KEY,
-    RE_UNESCAPE,
-    RE_SUB_UNESCAPE,
+    RE_DELIM_VAR_UNESCAPE,
+    RE_SUB_DELIM_VAR_UNESCAPE,
     VAR_COMPACT_ENCODING,
     RE_DELIM_VAR,
 )
@@ -68,7 +68,7 @@ class Log:
         epoch time.
         :return: 0 on success, < 0 on error
         """
-        self.logtype = str(RE_DELIM_VAR.sub(b"<var>", self.encoded_logtype))
+        self.logtype = RE_DELIM_VAR.sub(b"<var>", self.encoded_logtype).decode()
         var_delim_matchs: List[Match[bytes]] = list(RE_DELIM_VAR.finditer(self.encoded_logtype))
         if not len(self.encoded_variables) == len(var_delim_matchs):
             raise RuntimeError("Number of var delims in logtype does not match stored vars")
@@ -302,10 +302,10 @@ class CLPBaseReader(metaclass=ABCMeta):
             t: bytes = bytes(token)
             if token_type != VAR_COMPACT_ENCODING[0]:
                 # remove any escaping done during encoding
-                t = RE_UNESCAPE.sub(RE_SUB_UNESCAPE, t)
+                t = RE_DELIM_VAR_UNESCAPE.sub(RE_SUB_DELIM_VAR_UNESCAPE, t)
             log.encoded_variables.append(t)
         elif token_id == ID_LOGTYPE:
-            log.encoded_logtype = RE_UNESCAPE.sub(RE_SUB_UNESCAPE, bytes(token))
+            log.encoded_logtype = RE_DELIM_VAR_UNESCAPE.sub(RE_SUB_DELIM_VAR_UNESCAPE, bytes(token))
         elif token_id == ID_TIMESTAMP:
             delta_ms: int = int.from_bytes(token, BYTE_ORDER, signed=True)
             log.timestamp_ms = self.last_timestamp_ms + delta_ms

@@ -45,10 +45,10 @@ ESCAPE_CHAR: bytes = b"\\"
 # for raw/literal string applies to the format string itself and not the delim
 # variable we are substituting in
 # Thus these need to be updated manually if the escape character ever changes
-RE_UNESCAPE: Pattern[bytes] = re.compile(rb"\\([\x11\x12\x13\\])")
-RE_SUB_UNESCAPE: bytes = rb"\1"
-RE_ESCAPE: Pattern[bytes] = re.compile(rb"([\x11\x12\x13\\])")
-RE_SUB_ESCAPE: bytes = rb"\\\1"
+RE_DELIM_VAR_UNESCAPE: Pattern[bytes] = re.compile(rb"\\([\x11\x12\x13\\])")
+RE_SUB_DELIM_VAR_UNESCAPE: bytes = rb"\1"
+RE_DELIM_VAR_ESCAPE: Pattern[bytes] = re.compile(rb"([\x11\x12\x13\\])")
+RE_SUB_DELIM_VAR_ESCAPE: bytes = rb"\\\1"
 RE_DELIM_VAR: Pattern[bytes] = re.compile(rb"([\x11\x12\x13])")
 
 # 0x10-0x1f reserved for variable-related constants
