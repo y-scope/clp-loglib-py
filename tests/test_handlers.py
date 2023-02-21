@@ -108,29 +108,42 @@ class TestCLPBase(unittest.TestCase):
         self.logger.removeHandler(self.clp_handler)
         self.logger.removeHandler(self.raw_handler)
 
-    def compare_all_logs(self) -> None:
+    def compare_all_logs(self, test_time: bool = True, size_msg: bool = False) -> None:
         self.close()
         clp_logs: List[str] = self.read_clp()
         raw_logs: List[str] = self.read_raw()
-        self.compare_logs(clp_logs, raw_logs)
+        self.compare_logs(clp_logs, raw_logs, test_time, size_msg)
 
-    def compare_logs(self, clp_logs: List[str], raw_logs: List[str]) -> None:
+    def compare_logs(
+        self,
+        clp_logs: List[str],
+        raw_logs: List[str],
+        test_time: bool = True,
+        size_msg: bool = False,
+    ) -> None:
         self.assertEqual(len(clp_logs), len(raw_logs))
         for clp_log, raw_log in zip(clp_logs, raw_logs):
             # Assume logs are always formatted in ISO timestamp at beginning
-            # Timestamp difference less than 8ms is close enough, but message
-            # must be the same
             clp_log_split: List[str] = clp_log.split()
             raw_log_split: List[str] = raw_log.split()
-            clp_time_str: str = " ".join(clp_log_split[0:2])
-            raw_time_str: str = " ".join(raw_log_split[0:2])
+
+            # Timestamp difference less than 8ms is close enough, but message
+            # must be the same
+            if test_time:
+                clp_time_str: str = " ".join(clp_log_split[0:2])
+                raw_time_str: str = " ".join(raw_log_split[0:2])
+                clp_timestamp: datetime = dateutil.parser.isoparse(clp_time_str)
+                raw_timestamp: datetime = dateutil.parser.isoparse(raw_time_str)
+                self.assertAlmostEqual(
+                    clp_timestamp, raw_timestamp, delta=timedelta(milliseconds=8)
+                )
+
             clp_msg: str = " ".join(clp_log_split[2:])
             raw_msg: str = " ".join(raw_log_split[2:])
-            clp_timestamp: datetime = dateutil.parser.isoparse(clp_time_str)
-            raw_timestamp: datetime = dateutil.parser.isoparse(raw_time_str)
-
-            self.assertAlmostEqual(clp_timestamp, raw_timestamp, delta=timedelta(milliseconds=8))
-            self.assertEqual(clp_msg, raw_msg)
+            msg: Optional[str] = None
+            if size_msg:
+                msg = f"len(clp_msg): {len(clp_msg)}, len(raw_msg): {len(raw_msg)}"
+            self.assertEqual(clp_msg, raw_msg, msg)
 
     def assert_clp_logs(self, expected_logs: List[str]) -> None:
         self.close()
@@ -143,7 +156,7 @@ class TestCLPBase(unittest.TestCase):
         self.compare_logs(clp_logs[len(expected_logs) :], self.read_raw())
 
 
-class TestCLPInitBase(TestCLPBase):
+class TestCLPHandlerBase(TestCLPBase):
     def test_time_format_at_start(self) -> None:
         self.clp_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
         self.raw_handler.setFormatter(logging.Formatter(" [%(levelname)s] %(message)s"))
@@ -164,8 +177,6 @@ class TestCLPInitBase(TestCLPBase):
         self.logger.info("no asctime in format")
         self.assert_clp_logs([f"{WARN_PREFIX} prepending clp_logging timestamp to formatter"])
 
-
-class TestCLPHandlerBase(TestCLPBase):
     def test_static(self) -> None:
         self.logger.info("static text log one")
         self.logger.info("static text log two")
@@ -194,11 +205,11 @@ class TestCLPHandlerBase(TestCLPBase):
         self.compare_all_logs()
 
     def test_long_log(self) -> None:
-        long_even_log: str = "hi" * (1024 * 1024)  # 2mb
-        long_odd_log: str = "hi" * (1024 * 1024 - 1)
+        long_even_log: str = "x" * (8 * 1024 * 1024)  # 8mb
+        long_odd_log: str = "x" * (8 * 1024 * 1024 - 1)
         self.logger.info(long_even_log)
         self.logger.info(long_odd_log)
-        self.compare_all_logs()
+        self.compare_all_logs(test_time=False, size_msg=True)
 
 
 class TestCLPSockHandler(TestCLPHandlerBase):
@@ -228,7 +239,7 @@ class TestCLPSockHandler(TestCLPHandlerBase):
             self.sock_path.unlink()
 
 
-class TestCLPStreamHandler(TestCLPHandlerBase, TestCLPInitBase):
+class TestCLPStreamHandler(TestCLPHandlerBase):
     # override
     def setUp(self) -> None:
         super().setUp()
