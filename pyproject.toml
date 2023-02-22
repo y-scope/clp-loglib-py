@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "clp_logging"
-version = "0.0.6"
+version = "0.0.7"
 license = { text = "Apache License 2.0" }
 authors = [
     { name="david lion", email="david.lion@yscope.com" },
