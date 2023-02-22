@@ -168,7 +168,7 @@ class CLPSockListener:
                 view: memoryview = memoryview(buf)
                 i: int = 0
                 while i < size:
-                    read = conn.recv_into(view[i:], size)
+                    read = conn.recv_into(view[i:], size - i)
                     if read == 0:
                         raise OSError("handler conn.recv_into returned 0 before finishing")
                     i += read
@@ -355,12 +355,12 @@ class CLPSockHandler(CLPBaseHandler):
         never returning and not closing properly on signal/EOF_CHAR
         """
         super().__init__()
-        sock_path: Path = log_path.with_suffix(".sock")
+        self.sock_path: Path = log_path.with_suffix(".sock")
         self.closed: bool = False
         self.sock: socket.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.listener_pid: int = 0
 
-        if self.sock.connect_ex(str(sock_path)) != 0:
+        if self.sock.connect_ex(str(self.sock_path)) != 0:
             if create_listener:
                 self.listener_pid = CLPSockListener.fork(
                     log_path, timestamp_format, timezone, timeout
@@ -369,7 +369,7 @@ class CLPSockHandler(CLPBaseHandler):
             # If we fail to connect again, the listener failed to resolve any
             # issues, so we raise an exception as there is nothing new to try
             try:
-                self.sock.connect(str(sock_path))
+                self.sock.connect(str(self.sock_path))
             except OSError:
                 self.sock.close()
                 raise
@@ -416,7 +416,13 @@ class CLPSockHandler(CLPBaseHandler):
         self.closed = True
 
     def stop_listener(self) -> None:
-        self.sock.send((0).to_bytes(SIZEOF_INT, BYTE_ORDER))
+        try:
+            self.sock.send((0).to_bytes(SIZEOF_INT, BYTE_ORDER))
+        except:
+            sock: socket.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.connect(str(self.sock_path))
+            sock.send((0).to_bytes(SIZEOF_INT, BYTE_ORDER))
+            sock.close()
         self.close()
 
 
