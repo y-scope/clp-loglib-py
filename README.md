@@ -50,18 +50,16 @@ logger.warn("example warning")
 
 This library also supports multiple processes writing to the same log file.
 In this case, all logging processes write to a listener server process through a TCP socket.  
-(The socket name is the log file path passed to CLPSockHandler with a ".sock" suffix.)
+The socket name is the log file path passed to CLPSockHandler with a ".sock" suffix.
 
 A CLPSockListener can be explicitly created (and will run as a daemon) by calling:
-    - `CLPSockListener.fork(log_path, sock_path, timezone, timestamp_format)`
+ `CLPSockListener.fork(log_path, sock_path, timezone, timestamp_format)`.
 Alternatively CLPSockHandlers can transparently start an associated CLPSockListener
 by calling `CLPSockHandler` with `create_listener=True`.
 
 CLPSockListener must be explicitly stopped once logging is completed. 
 There are two ways to stop the listener process:
- - Calling `stop_listener` from an existing handler, or from a new handler with the same log path 
-     - `clp_sock_handler.stop_listener()` or
-        `CLPSockHandler(Path("example.clp.zst")).stop_listener()`
+ - Calling `stop_listener()` from an existing handler, e.g., `clp_handler.stop_listener()`, or from a new handler with the same log path, e.g., `CLPSockHandler(Path("example.clp.zst")).stop_listener()`
  - Kill the CLPSockListener process with SIGTERM
 
 #### Example: CLPSockHandler + CLPSockListener
@@ -75,8 +73,6 @@ clp_handler = CLPSockHandler(Path("example.clp.zst"), create_listener=True)
 logger = logging.getLogger(__name__)
 logger.addHandler(clp_handler)
 logger.warn("example warning")
-...
-clp_handler.stop_listener() # stop the listener when logging is done
 ```
 In a single process or thread once logging is completed:
 ```python
