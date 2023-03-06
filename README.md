@@ -1,13 +1,17 @@
-# CLP Logging
-This is a Python `logging` library meant to supplement CLP. To learn more about
-CLP check out the [repository][0] and [Uber's blog][1].
+# CLP Python Logging Library
+This is a Python `logging` library meant to supplement [CLP (Compressed Log Processor)][0].
+Logs are compressed in a streaming fashion into CLP's Internal Representation (IR) format before written to disk.
+More details are described in this [Uber's blog][1].  
+
+Logs compressed in IR format can be viewed in a [log viewer][2] or programmatically analyzed using 
+APIs provided here. They can also be decompressed back into plain-text log files using [CLP][0] (in a future release).    
 
 To achieve the best compression ratio, CLP should be used to compress large
-batches of related log events, one batch at a time. However, individual log
+batches of logs, one batch at a time. However, individual log
 files are generally small and are generated across a long period of time.
 
 This logging library helps solve this problem by logging directly in CLP's
-internal representation (IR). A log created with a CLP logging handler is first
+Internal Representation (IR). A log created with a CLP logging handler is first
 parsed and then appended to a compressed output stream in IR form.
 See [README-protocol.md](README-protocol.md) for more details on the format of
 CLP IR.
@@ -17,6 +21,7 @@ ingested into CLP together at a later time.
 
 [0]: https://github.com/y-scope/clp
 [1]: https://www.uber.com/blog/reducing-logging-cost-by-two-orders-of-magnitude-using-clp/
+[2]: https://github.com/y-scope/yscope-log-viewer
 
 ## Quick Start
 The package is hosted with pypi (https://pypi.org/project/clp-logging/), so it
@@ -42,34 +47,20 @@ logger.warn("example warning")
 ```
 
 ### CLPSockHandler + CLPSockListener
-- A Unix domain socket logging handler and listener server to enable multiple
-  concurrent handlers across multiple processes to log to the same log file.
-- The handler writes encoded logs and sends them over the socket to the
-  separate listener process
-    - Socket name is the log file path passed to CLPSockHandler with a ".sock"
-      suffix
-- On creation a CLPSockHandler will try to connect to the listener associated
-  with its socket name
-- CLPSockListener is essentially a namespace as it is a class, but only
-  contains static methods and data
-- A CLPSockListener can be explicitly created (and will run as a daemon) by
-  calling:
-    - `CLPSockListener.fork(log_path, sock_path, timezone, timestamp_format)`
-- Alternatively CLPSockHandlers can transparently start an associated
-  CLPSockListener
-    - Call `CLPSockHandler` with `create_listener=True`
-- Multiple CLPSockHandlers logging to the same file will use the same socket
-  and therefore the same listener
-    - It is safe for these handlers to all use `create_listener=True`
-        - They will race to create a listener with only one successfully
-          binding the socket and living on
-        - All the handlers will then connect to the one successful listener
-- CLPSockListener must be explicitly stopped once logging is completed
-    - Send CLPSockListener process SIGTERM
-    - Use an existing handler or create a new handler with the same log path
-      and call `stop_listener`
-        - `clp_sock_handler.stop_listener()` or
-          `CLPSockHandler(Path("example.clp.zst")).stop_listener()`
+
+This library also supports multiple processes writing to the same log file.
+In this case, all logging processes write to a listener server process through a TCP socket.  
+The socket name is the log file path passed to CLPSockHandler with a ".sock" suffix.
+
+A CLPSockListener can be explicitly created (and will run as a daemon) by calling:
+ `CLPSockListener.fork(log_path, sock_path, timezone, timestamp_format)`.
+Alternatively CLPSockHandlers can transparently start an associated CLPSockListener
+by calling `CLPSockHandler` with `create_listener=True`.
+
+CLPSockListener must be explicitly stopped once logging is completed. 
+There are two ways to stop the listener process:
+ - Calling `stop_listener()` from an existing handler, e.g., `clp_handler.stop_listener()`, or from a new handler with the same log path, e.g., `CLPSockHandler(Path("example.clp.zst")).stop_listener()`
+ - Kill the CLPSockListener process with SIGTERM
 
 #### Example: CLPSockHandler + CLPSockListener
 In the handler processes or threads:
