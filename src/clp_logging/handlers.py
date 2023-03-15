@@ -149,6 +149,7 @@ class CLPLogLevelTimeout:
           delta, that delta will continue to be used to calculate the soft
           timer until a timeout occurs.
     """
+
     # delta times in milliseconds
     # note: logging.FATAL == logging.CRITICAL and
     #       logging.WARN == logging.WARNING
