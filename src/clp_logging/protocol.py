@@ -6,6 +6,7 @@ from typing_extensions import Final, Literal
 SIZEOF_INT: Final[int] = 4
 SIZEOF_SHORT: Final[int] = 2
 SIZEOF_BYTE: Final[int] = 1
+ULONG_MAX: Final[int] = (1 << 64) - 1
 UINT_MAX: Final[int] = (1 << 32) - 1
 INT_MAX: Final[int] = (1 << 31) - 1
 INT_MIN: Final[int] = ~INT_MAX
@@ -90,4 +91,7 @@ SIZEOF: Dict[bytes, Tuple[int, bool]] = {
     TIMESTAMP_DELTA_BYTE: (SIZEOF_BYTE, True),
     TIMESTAMP_DELTA_SHORT: (SIZEOF_SHORT, True),
     TIMESTAMP_DELTA_INT: (SIZEOF_INT, True),
+    # This is used to handle distinguishing null bytes from flushing a
+    # zstandard frame and actual eof
+    EOF_CHAR: (SIZEOF_INT, False),
 }

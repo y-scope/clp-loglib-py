@@ -8,21 +8,30 @@ from pathlib import Path
 from queue import Empty, Queue
 from signal import signal, SIGINT, SIGTERM
 import socket
-from threading import Thread
+from threading import Thread, Timer
 import sys
 from types import FrameType
-from typing import ClassVar, IO, Optional, Tuple, TypeVar
+from typing import Callable, ClassVar, Dict, IO, List, Optional, Tuple, TypeVar
 
 import dateutil.tz
-from zstandard import ZstdCompressor, ZstdCompressionWriter
+from zstandard import FLUSH_FRAME, ZstdCompressor, ZstdCompressionWriter
 
 from clp_logging.encoder import CLPEncoder
-from clp_logging.protocol import BYTE_ORDER, EOF_CHAR, SIZEOF_INT, UINT_MAX
+from clp_logging.protocol import (
+    BYTE_ORDER,
+    EOF_CHAR,
+    INT_MAX,
+    INT_MIN,
+    SIZEOF_INT,
+    UINT_MAX,
+    ULONG_MAX,
+)
 
-# Note: no need to quote "Queue[bytes]" in python 3.9
+# TODO: lock writes to zstream if GIL ever goes away
+# Note: no need to quote "Queue[Tuple[int, bytes]]" in python 3.9
 
 DEFAULT_LOG_FORMAT: str = " %(levelname)s %(name)s %(message)s"
-WARN_PREFIX: str = "[WARN][clp_logging]"
+WARN_PREFIX: str = " [WARN][clp_logging]"
 
 
 def _init_timeinfo(fmt: Optional[str], tz: Optional[str]) -> Tuple[str, str]:
@@ -91,15 +100,176 @@ class CLPBaseHandler(logging.Handler, metaclass=ABCMeta):
         self.formatter = fmt
 
     def _warn(self, msg: str) -> None:
-        self._write(f" {WARN_PREFIX} {msg}")
+        self._write(logging.WARN, f"{WARN_PREFIX} {msg}")
 
     @abstractmethod
-    def _write(self, msg: str) -> None:
+    def _write(self, loglevel: int, msg: str) -> None:
         raise NotImplementedError("_write must be implemented by derived handlers")
 
-    @abstractmethod
+    # override
     def emit(self, record: logging.LogRecord) -> None:
-        raise NotImplementedError("emit must be implemented by derived handlers")
+        """
+        Override `logging.Handler.emit` in base class to ensure
+        `logging.Handler.handleError` is always called and avoid requiring a
+        `logging.LogRecord` to call internal writing functions.
+        """
+        msg: str = self.format(record)
+        try:
+            self._write(record.levelno, msg)
+        except Exception:
+            self.handleError(record)
+
+
+class CLPLogLevelTimeout:
+    """
+    A configurable timeout feature based on logging level that can be added to
+    a CLPHandler. To schedule a timeout, two timers are calculated with each
+    new log event. There is no distinction between the timer that triggers a
+    timeout and once a timeout occurs both timers are reset. A timeout will
+    always flush the zstandard frame and then call a user supplied function
+    (`timeout_fn`).
+
+    The two timers are implemented using `threading.Timer`. Each timer utilizes
+    a map that associates each log level to a time delta (in milliseconds).
+    Both the time deltas and the log levels are user configurable.
+    The timers:
+        - Hard timer: Represents the maximum elapsed time between generating a
+          log event and triggering a timeout. The hard timer can only decrease
+          towards a timeout occuring. It will decrease if a log level's time
+          delta would schedule the timeout sooner. In other words, seeing a
+          more important log level will cause a timeout to occur sooner. It is
+          not possible for the hard timer to increase (a log whose level's
+          delta would schedule a timeout after the current hard timer will not
+          update the hard timer).
+        - Soft timer: Represents the maximum elapsed time to wait for a new log
+          event to be generated before triggering a timeout. Seeing a new log
+          event will always cause the soft timer to be recalculated. The delta
+          used to calculate the new soft timer is the lowest delta seen since
+          the last timeout. Therefore, if we've seen a log level with a low
+          delta, that delta will continue to be used to calculate the soft
+          timer until a timeout occurs.
+    """
+    # delta times in milliseconds
+    # note: logging.FATAL == logging.CRITICAL and
+    #       logging.WARN == logging.WARNING
+    _HARD_TIMEOUT_DELTAS: Dict[int, int] = {
+        logging.FATAL: 5 * 60 * 1000,
+        logging.ERROR: 5 * 60 * 1000,
+        logging.WARN: 10 * 60 * 1000,
+        logging.INFO: 30 * 60 * 1000,
+        logging.DEBUG: 30 * 60 * 1000,
+    }
+    _SOFT_TIMEOUT_DELTAS: Dict[int, int] = {
+        logging.FATAL: 5 * 1000,
+        logging.ERROR: 10 * 1000,
+        logging.WARN: 15 * 1000,
+        logging.INFO: 3 * 60 * 1000,
+        logging.DEBUG: 3 * 60 * 1000,
+    }
+
+    def __init__(
+        self,
+        timeout_fn: Callable[[], None],
+        hard_timeout_deltas: Dict[int, int] = _HARD_TIMEOUT_DELTAS,
+        soft_timeout_deltas: Dict[int, int] = _SOFT_TIMEOUT_DELTAS,
+    ) -> None:
+        """
+        Constructs a `CLPLogLevelTimeout` object which can be added to a
+        CLPHandler to enable the timeout feature. `timeout_fn` is the only
+        required parameter, but can be an empty function. Functionally, this
+        will ensure a zstandard frame is flushed periodically. See
+        `_HARD_TIMEOUT_DELTAS` and `_SOFT_TIMEOUT_DELTAS` for the default
+        timeout values in milliseconds.
+
+        :param timeout_fn: A user function that will be called when a timeout
+        (hard or soft) occurs.
+        :param hard_timeout_deltas: A dictionary, mapping a log level (as an
+        int) to the maximum elapsed time (in milliseconds) between generating a
+        log event and triggering a timeout.
+        :param soft_timeout_deltas: A dictionary, mapping a log level (as an
+        int) to the maximum elapsed time to wait (in milliseconds) for a new
+        log event to be generated before triggering a timeout.
+
+        """
+        self.hard_timeout_deltas: Dict[int, int] = hard_timeout_deltas
+        self.soft_timeout_deltas: Dict[int, int] = soft_timeout_deltas
+        self.timeout_fn: Callable[[], None] = timeout_fn
+        self.next_hard_timeout_ts: int = ULONG_MAX
+        self.min_soft_timeout_delta: int = ULONG_MAX
+        self.zstream: Optional[ZstdCompressionWriter] = None
+        self.hard_timeout_thread: Optional[Timer] = None
+        self.soft_timeout_thread: Optional[Timer] = None
+
+    def set_zstream(self, zstream: ZstdCompressionWriter) -> None:
+        self.zstream = zstream
+
+    def timeout(self) -> None:
+        """
+        Wraps the call to the user supplied `timeout_fn` ensuring that any
+        existing timeout threads are cancelled, `next_hard_timeout_ts` and
+        `min_soft_timeout_delta` are reset, and the zstandard frame is flushed.
+        """
+        if self.hard_timeout_thread:
+            self.hard_timeout_thread.cancel()
+        if self.soft_timeout_thread:
+            self.soft_timeout_thread.cancel()
+        self.next_hard_timeout_ts = ULONG_MAX
+        self.min_soft_timeout_delta = ULONG_MAX
+
+        if self.zstream:
+            self.zstream.flush(FLUSH_FRAME)
+        self.timeout_fn()
+
+    def update(self, loglevel: int, log_timestamp_ms: int, log_fn: Callable[[str], None]) -> None:
+        """
+        Carries out the logic to schedule the next timeout based on the current
+        log.
+
+        :param loglevel: The log level (verbosity) of the current log.
+        :param log_timestamp_ms: The timestamp in milliseconds of the current
+        log.
+        :param logfn: A function used for internal logging by the library. This
+        allows us to correctly log through the handler itself rather than just
+        printing to stdout/stderr.
+        """
+        hard_timeout_delta: int
+        if loglevel not in self.hard_timeout_deltas:
+            log_fn(
+                f"{WARN_PREFIX} log level {loglevel} not in self.hard_timeout_deltas; defaulting"
+                " to _HARD_TIMEOUT_DELTAS[logging.INFO]."
+            )
+            hard_timeout_delta = CLPLogLevelTimeout._HARD_TIMEOUT_DELTAS[logging.INFO]
+        else:
+            hard_timeout_delta = self.hard_timeout_deltas[loglevel]
+
+        new_hard_timeout_ts: int = log_timestamp_ms + hard_timeout_delta
+        if new_hard_timeout_ts < self.next_hard_timeout_ts:
+            if self.hard_timeout_thread:
+                self.hard_timeout_thread.cancel()
+            self.hard_timeout_thread = Timer(
+                new_hard_timeout_ts / 1000 - time.time(), self.timeout
+            )
+            self.hard_timeout_thread.start()
+            self.next_hard_timeout_ts = new_hard_timeout_ts
+
+        soft_timeout_delta: int
+        if loglevel not in self.soft_timeout_deltas:
+            log_fn(
+                f"{WARN_PREFIX} log level {loglevel} not in self.soft_timeout_deltas; defaulting"
+                " to _SOFT_TIMEOUT_DELTAS[logging.INFO]."
+            )
+            soft_timeout_delta = CLPLogLevelTimeout._SOFT_TIMEOUT_DELTAS[logging.INFO]
+        else:
+            soft_timeout_delta = self.soft_timeout_deltas[loglevel]
+
+        if soft_timeout_delta < self.min_soft_timeout_delta:
+            self.min_soft_timeout_delta = soft_timeout_delta
+
+        new_soft_timeout_ms: int = log_timestamp_ms + soft_timeout_delta
+        if self.soft_timeout_thread:
+            self.soft_timeout_thread.cancel()
+        self.soft_timeout_thread = Timer(new_soft_timeout_ms / 1000 - time.time(), self.timeout)
+        self.soft_timeout_thread.start()
 
 
 class CLPSockListener:
@@ -145,7 +315,7 @@ class CLPSockListener:
     @staticmethod
     def _handle_client(
         conn: socket.socket,
-        log_queue: "Queue[bytes]",
+        log_queue: "Queue[Tuple[int, bytes]]",
     ) -> int:
         """
         Continuously reads from an individual `CLPSockHandler` and sends the
@@ -155,15 +325,18 @@ class CLPSockListener:
         :param log_queue: Queue with `CLPSockListener._aggregator` thread to
         write encoded messages.
         """
-        size_buf: bytearray = bytearray(SIZEOF_INT)
+        int_buf: bytearray = bytearray(SIZEOF_INT)
         while not CLPSockListener._signaled:
             try:
-                read: int = conn.recv_into(size_buf, SIZEOF_INT)
+                read: int = conn.recv_into(int_buf, SIZEOF_INT)
                 assert read == SIZEOF_INT
-                size: int = int.from_bytes(size_buf, BYTE_ORDER)
+                size: int = int.from_bytes(int_buf, BYTE_ORDER)
                 if size == 0:
-                    log_queue.put(EOF_CHAR)
+                    log_queue.put((0, EOF_CHAR))
                     break
+                read = conn.recv_into(int_buf, SIZEOF_INT)
+                assert read == SIZEOF_INT
+                loglevel: int = int.from_bytes(int_buf, BYTE_ORDER)
                 buf: bytearray = bytearray(size)
                 view: memoryview = memoryview(buf)
                 i: int = 0
@@ -172,7 +345,7 @@ class CLPSockListener:
                     if read == 0:
                         raise OSError("handler conn.recv_into returned 0 before finishing")
                     i += read
-                log_queue.put(buf)
+                log_queue.put((loglevel, buf))
             except socket.timeout:  # TODO replaced with TimeoutError in python 3.10
                 pass
             except OSError:
@@ -183,10 +356,11 @@ class CLPSockListener:
     @staticmethod
     def _aggregator(
         log_path: Path,
-        log_queue: "Queue[bytes]",
+        log_queue: "Queue[Tuple[int, bytes]]",
         timestamp_format: Optional[str],
         timezone: Optional[str],
         timeout: int,
+        loglevel_timeout: Optional[CLPLogLevelTimeout] = None,
     ) -> int:
         """
         Continuously receive encoded messages from
@@ -208,21 +382,30 @@ class CLPSockListener:
         last_timestamp_ms: int = floor(time.time() * 1000)  # convert to ms and truncate
 
         with log_path.open("ab") as log, cctx.stream_writer(log) as zstream:
+            if loglevel_timeout:
+                loglevel_timeout.set_zstream(zstream)
+
+            def log_fn(msg: str) -> None:
+                nonlocal last_timestamp_ms
+                buf: bytearray = bytearray(CLPEncoder.encode_message(msg.encode()))
+                last_timestamp_ms = CLPEncoder.encode_timestamp(last_timestamp_ms, buf)
+                zstream.write(buf)
+
             zstream.write(CLPEncoder.emit_preamble(last_timestamp_ms, timestamp_format, timezone))
             while not CLPSockListener._signaled:
                 msg: bytes
                 try:
-                    msg = log_queue.get(timeout=timeout)
+                    loglevel, msg = log_queue.get(timeout=timeout)
                 except Empty:
                     continue
                 if msg == EOF_CHAR:
                     break
-                ts_buf: bytearray = bytearray()
-                last_timestamp_ms = CLPEncoder.encode_timestamp(last_timestamp_ms, ts_buf)
-                zstream.write(msg)
-                zstream.write(ts_buf)
+                buf: bytearray = bytearray(msg)
+                last_timestamp_ms = CLPEncoder.encode_timestamp(last_timestamp_ms, buf)
+                if loglevel_timeout:
+                    loglevel_timeout.update(loglevel, last_timestamp_ms, log_fn)
+                zstream.write(buf)
             zstream.write(EOF_CHAR)
-            zstream.flush()
         # tell _server to exit
         CLPSockListener._signaled = True
         return 0
@@ -235,6 +418,7 @@ class CLPSockListener:
         timestamp_format: Optional[str],
         timezone: Optional[str],
         timeout: int,
+        loglevel_timeout: Optional[CLPLogLevelTimeout] = None,
     ) -> int:
         """
         The `CLPSockListener` server function run in a new process.
@@ -253,7 +437,7 @@ class CLPSockListener:
         """
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.settimeout(timeout)
-        log_queue: "Queue[bytes]" = Queue()
+        log_queue: "Queue[Tuple[int, bytes]]" = Queue()
         ret: int = CLPSockListener._try_bind(sock, sock_path)
         sock.listen()
         os.write(parent_fd, b"\x00")
@@ -265,7 +449,7 @@ class CLPSockListener:
 
         Thread(
             target=CLPSockListener._aggregator,
-            args=(log_path, log_queue, timestamp_format, timezone, timeout),
+            args=(log_path, log_queue, timestamp_format, timezone, timeout, loglevel_timeout),
             daemon=False,
         ).start()
 
@@ -290,6 +474,7 @@ class CLPSockListener:
         timestamp_format: Optional[str],
         timezone: Optional[str],
         timeout: int,
+        loglevel_timeout: Optional[CLPLogLevelTimeout] = None,
     ) -> int:
         """
         Fork a process running `CLPSockListener._server` and use `os.setsid()`
@@ -314,7 +499,7 @@ class CLPSockListener:
             os.setsid()
             sys.exit(
                 CLPSockListener._server(
-                    wfd, log_path, sock_path, timestamp_format, timezone, timeout
+                    wfd, log_path, sock_path, timestamp_format, timezone, timeout, loglevel_timeout
                 )
             )
         else:
@@ -337,6 +522,7 @@ class CLPSockHandler(CLPBaseHandler):
         timestamp_format: Optional[str] = None,
         timezone: Optional[str] = None,
         timeout: int = 2,
+        loglevel_timeout: Optional[CLPLogLevelTimeout] = None,
     ) -> None:
         """
         Constructor method that optionally spawns a `CLPSockListener`.
@@ -363,7 +549,7 @@ class CLPSockHandler(CLPBaseHandler):
         if self.sock.connect_ex(str(self.sock_path)) != 0:
             if create_listener:
                 self.listener_pid = CLPSockListener.fork(
-                    log_path, timestamp_format, timezone, timeout
+                    log_path, timestamp_format, timezone, timeout, loglevel_timeout
                 )
 
             # If we fail to connect again, the listener failed to resolve any
@@ -375,7 +561,7 @@ class CLPSockHandler(CLPBaseHandler):
                 raise
 
     # override
-    def _write(self, msg: str) -> None:
+    def _write(self, loglevel: int, msg: str) -> None:
         try:
             if self.closed:
                 raise RuntimeError("Socket already closed")
@@ -385,20 +571,16 @@ class CLPSockHandler(CLPBaseHandler):
                 raise NotImplementedError(
                     "Encoded message longer than UINT_MAX currently unsupported"
                 )
+            loglevelb: bytes = loglevel.to_bytes(SIZEOF_INT, BYTE_ORDER)
+            if loglevel > INT_MAX or loglevel < INT_MIN:
+                raise NotImplementedError("Log level larger than signed INT currently unsupported")
             sizeb: bytes = size.to_bytes(SIZEOF_INT, BYTE_ORDER)
             self.sock.sendall(sizeb)
+            self.sock.sendall(loglevelb)
             self.sock.sendall(clp_msg)
         except Exception as e:
             self.sock.close()
             raise e
-
-    # override
-    def emit(self, record: logging.LogRecord) -> None:
-        msg: str = self.format(record)
-        try:
-            self._write(msg)
-        except Exception:
-            self.handleError(record)
 
     # override
     def handleError(self, record: logging.LogRecord) -> None:
@@ -446,6 +628,7 @@ class CLPStreamHandler(CLPBaseHandler):
         stream: Optional[IO[bytes]],
         timestamp_format: Optional[str] = None,
         timezone: Optional[str] = None,
+        loglevel_timeout: Optional[CLPLogLevelTimeout] = None,
     ) -> None:
         super().__init__()
         self.closed: bool = False
@@ -457,8 +640,11 @@ class CLPStreamHandler(CLPBaseHandler):
         self.timestamp_format, self.timezone = _init_timeinfo(timestamp_format, timezone)
         self.init(self.stream)
 
-    # override
-    def _write(self, msg: str) -> None:
+        if loglevel_timeout:
+            loglevel_timeout.set_zstream(self.zstream)
+        self.loglevel_timeout = loglevel_timeout
+
+    def _direct_write(self, msg: str) -> None:
         if self.closed:
             raise RuntimeError("Stream already closed")
         clp_msg: bytearray = CLPEncoder.encode_message(msg.encode())
@@ -466,12 +652,14 @@ class CLPStreamHandler(CLPBaseHandler):
         self.zstream.write(clp_msg)
 
     # override
-    def emit(self, record: logging.LogRecord) -> None:
-        msg: str = self.format(record)
-        try:
-            self._write(msg)
-        except Exception:
-            self.handleError(record)
+    def _write(self, loglevel: int, msg: str) -> None:
+        if self.closed:
+            raise RuntimeError("Stream already closed")
+        clp_msg: bytearray = CLPEncoder.encode_message(msg.encode())
+        self.last_timestamp_ms = CLPEncoder.encode_timestamp(self.last_timestamp_ms, clp_msg)
+        if self.loglevel_timeout:
+            self.loglevel_timeout.update(loglevel, self.last_timestamp_ms, self._direct_write)
+        self.zstream.write(clp_msg)
 
     # Added to logging.StreamHandler in python 3.7
     # override
@@ -494,7 +682,6 @@ class CLPStreamHandler(CLPBaseHandler):
 
     # override
     def close(self) -> None:
-        self.zstream.flush()
         self.zstream.write(EOF_CHAR)
         self.zstream.close()
         self.closed = True
@@ -510,6 +697,7 @@ class CLPFileHandler(CLPStreamHandler):
         mode: str = "ab",
         timestamp_format: Optional[str] = None,
         timezone: Optional[str] = None,
+        loglevel_timeout: Optional[CLPLogLevelTimeout] = None,
     ) -> None:
         self.fpath: Path = fpath
-        super().__init__(open(fpath, mode))
+        super().__init__(open(fpath, mode), timestamp_format, timezone, loglevel_timeout)

@@ -4,6 +4,7 @@ from typing import Dict, Optional, Tuple
 from clp_logging.protocol import (
     BYTE_ORDER,
     EOF_CHAR,
+    ID_EOF,
     ID_LOGTYPE,
     ID_MASK,
     ID_TIMESTAMP,
@@ -99,9 +100,14 @@ class CLPDecoder:
         return metadata, pos + json_size
 
     @staticmethod
-    def decode_token(src: memoryview, pos: int = 0) -> Tuple[int, Optional[bytes], int]:
+    def decode_token(src: memoryview, pos: int = 0) -> Tuple[int, bytes, int]:
         """
         Decode `src` start at `pos` extracting the next token.
+        Note, we can use negative values despite `token_type` being an `int` as
+        the integer value of an individual byte is restricted to [0:256) (see
+        `bytes`). Therefore `token_type` (`type_byte[0]`) can never be
+        negative.
+
         :param src: Bytes to decode
         :param pos: The position in `src` to begin decoding from
         :return: A tuple of the token type byte, the token in bytes, and the
@@ -110,24 +116,22 @@ class CLPDecoder:
         error.
         """
         type_byte: memoryview = src[pos : pos + 1]
+        token_type: int = type_byte[0]
         pos += SIZEOF_BYTE
-        if type_byte == EOF_CHAR:
-            return 0, None, pos
-        src_len: int = len(src)
 
         info: Optional[Tuple[int, bool]] = SIZEOF.get(type_byte.tobytes())
         if not info:
-            return -2, None, pos
+            return -2, type_byte, pos
 
         size: int
         signed: bool
         size, signed = info
-        token_type: int = type_byte[0]
-        token_id: int = token_type & ID_MASK
         end: int = pos + size
+        src_len: int = len(src)
         if end >= src_len:
-            return -1, None, end
+            return -1, type_byte, end
 
+        token_id: int = token_type & ID_MASK
         if token_id == ID_VAR:
             if type_byte == VAR_COMPACT_ENCODING:
                 return token_type, src[pos:end], end
@@ -136,7 +140,7 @@ class CLPDecoder:
                 pos = end
                 end += var_size
                 if end >= src_len:
-                    return -1, None, end
+                    return -1, type_byte, end
                 return token_type, src[pos:end], end
 
         elif token_id == ID_LOGTYPE:
@@ -144,11 +148,18 @@ class CLPDecoder:
             pos = end
             end += logtype_size
             if end >= src_len:
-                return -1, None, end
+                return -1, type_byte, end
             return token_type, src[pos:end], end
 
         elif token_id == ID_TIMESTAMP:
             return token_type, src[pos:end], end
 
+        elif token_id == ID_EOF:
+            # Calling `zstream.flush(FLUSH_FRAME)` seems to leave
+            # \x00\x00\x00\xc9 between frames.
+            if b"\x00\x00\x00\xc9" == src[pos:end]:
+                return token_type, type_byte, end
+            else:
+                return -4, type_byte, end
         else:
-            return -3, None, end
+            return -3, type_byte, end
