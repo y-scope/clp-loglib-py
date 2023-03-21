@@ -14,6 +14,7 @@ from clp_logging.protocol import (
     DELIM_DICT,
     DELIM_FLOAT,
     DELIM_INT,
+    EOF_CHAR,
     ID_EOF,
     ID_LOGTYPE,
     ID_MASK,
@@ -138,6 +139,7 @@ class CLPBaseReader(metaclass=ABCMeta):
         """
         self._buf: bytearray = bytearray(chunk_size)
         self.view: memoryview = memoryview(self._buf)
+        self.valid_buf_len: int = 0
         self.metadata: Optional[Metadata] = None
         self.last_timestamp_ms: int
         self.timestamp_format: Optional[str] = timestamp_format
@@ -159,7 +161,8 @@ class CLPBaseReader(metaclass=ABCMeta):
         if self.metadata:
             return self.pos
 
-        if self.readinto_buf(0) <= 0:
+        self.valid_buf_len = self.readinto_buf(0)
+        if self.valid_buf_len <= 0:
             raise RuntimeError("readinto_buf for preamble failed")
         self.metadata, self.pos = CLPDecoder.decode_preamble(self.view, 0)
         if self.metadata:
@@ -264,32 +267,39 @@ class CLPBaseReader(metaclass=ABCMeta):
         error
         """
         while True:
+            token: bytes
             while True:
                 token_type: int
-                token: Optional[bytes]
-                token_type, token, pos = CLPDecoder.decode_token(self.view[offset:])
+                token_type, token, pos = CLPDecoder.decode_token(
+                    self.view[offset : self.valid_buf_len]
+                )
                 if token_type == -1:  # Read more
                     break
-                elif token_type == 0:  # EOF
-                    return 0
-                elif token_type < -1 or not token:
-                    raise RuntimeError("Error decoding token")
+                elif token_type < -1:
+                    raise RuntimeError(
+                        f"Error decoding token: 0x{token.hex()}, type: {token_type}"
+                    )
+
+                offset += pos
+                # This occurs when we have seen a null byte, but were able to
+                # read past it from the zstandard stream. This occurs when a
+                # zstandard frame was flushed. After we have incremented offset
+                # past the zstandard bytes we can continue to read tokens.
+                if token_type == ID_EOF:
+                    continue
 
                 if log:
                     self._store_token(log, token_type, token)
 
-                offset += pos
                 # Once we read the timestamp we have completed a log
                 token_id: int = token_type & ID_MASK
                 if token_id == ID_TIMESTAMP:
                     return offset
-                elif token_id == ID_EOF:
-                    return 0
 
             # Shift valid bytes to the start to make room for reading
             # Grow the buffer if more than half is still valid
-            valid: int = len(self.view) - offset
-            self.view[:valid] = self.view[offset:]
+            valid: int = self.valid_buf_len - offset
+            self.view[:valid] = self.view[offset : self.valid_buf_len]
             if valid > len(self._buf) // 2:
                 tmp = bytearray(len(self._buf) * 2)
                 tmp[:valid] = self.view
@@ -299,8 +309,12 @@ class CLPBaseReader(metaclass=ABCMeta):
             self.pos = 0
             offset = 0
 
-            if self.readinto_buf(valid) <= 0:
+            ret: int = self.readinto_buf(valid)
+            if ret == 0 and token == EOF_CHAR:
+                return 0
+            elif ret < 0:
                 return -1
+            self.valid_buf_len = valid + ret
 
     def _store_token(self, log: Log, token_type: int, token: bytes) -> None:
         """
@@ -325,7 +339,7 @@ class CLPBaseReader(metaclass=ABCMeta):
             delta_ms: int = int.from_bytes(token, BYTE_ORDER, signed=True)
             log.timestamp_ms = self.last_timestamp_ms + delta_ms
             self.last_timestamp_ms = log.timestamp_ms
-        elif token_id != ID_EOF:
+        else:
             raise RuntimeError(f"Bad token token_id: {token_id}")
         return
 
@@ -344,7 +358,9 @@ class CLPStreamReader(CLPBaseReader):
         super().__init__(timestamp_format, chunk_size)
         self.stream: IO[bytes] = stream
         self.dctx: ZstdDecompressor = ZstdDecompressor()
-        self.zstream: ZstdDecompressionReader = self.dctx.stream_reader(self.stream)
+        self.zstream: ZstdDecompressionReader = self.dctx.stream_reader(
+            self.stream, read_across_frames=True
+        )
 
     def readinto_buf(self, offset: int) -> int:
         """
