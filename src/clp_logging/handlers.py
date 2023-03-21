@@ -251,6 +251,7 @@ class CLPLogLevelTimeout:
             self.hard_timeout_thread = Timer(
                 new_hard_timeout_ts / 1000 - time.time(), self.timeout
             )
+            self.hard_timeout_thread.setDaemon(True)
             self.hard_timeout_thread.start()
             self.next_hard_timeout_ts = new_hard_timeout_ts
 
@@ -271,6 +272,7 @@ class CLPLogLevelTimeout:
         if self.soft_timeout_thread:
             self.soft_timeout_thread.cancel()
         self.soft_timeout_thread = Timer(new_soft_timeout_ms / 1000 - time.time(), self.timeout)
+        self.soft_timeout_thread.setDaemon(True)
         self.soft_timeout_thread.start()
 
 
