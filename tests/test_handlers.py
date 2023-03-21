@@ -284,7 +284,8 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
         """
         This helper function uses `multiprocessing.RawArray` and
         `multiprocessing.RawValue` to allow data from timeouts in the separate
-        CLPSockListener process to be seen.
+        CLPSockListener process to be seen. The last expected timeout occurs on
+        closing the handler.
 
         :param loglevels: generate one log for each entry at given log level
         :param delay: (fraction of) seconds to sleep between `logger.log` calls
@@ -298,9 +299,7 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
         # typing for multiprocess.Synchronized* has open issues
         # https://github.com/python/typeshed/issues/8799
         # TODO: when the issue is closed we should update the typing here
-        # We create one extra index past `expected_timeout_count` so that the
-        # timeout that occurs on close does not error.
-        timeout_ts: SynchronizedArray[c_double] = Array(c_double, [0.0] * (expected_timeout_count + 1))
+        timeout_ts: SynchronizedArray[c_double] = Array(c_double, [0.0] * expected_timeout_count)
         timeout_count: Synchronized[int] = cast("Synchronized[int]", Value(c_int, 0))
 
         def timeout_fn() -> None:
@@ -317,15 +316,14 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
             self.logger.log(loglevel, f"log{i} with loglevel={loglevel}")
             time.sleep(delay)
 
-        # sleep long enough so that the final expected timeout can occur
-        # we pad the remaining time with a second for insurance
+        # sleep long enough so that the final expected timeout can # occur
         time_to_last_timeout: float = (start_ts + expected_timeout_deltas[-1]) - time.time()
-        time.sleep(1 + time_to_last_timeout)
+        time.sleep(time_to_last_timeout)
+
+        self.logger.log(logging.INFO, f"ensure close flushes correctly")
 
         self.compare_all_logs()
-        # We decrement `timeout_count.value` by 1 to account for the extra
-        # timeout on close.
-        self.assertEqual(timeout_count.value - 1, expected_timeout_count)
+        self.assertEqual(timeout_count.value, expected_timeout_count)
         for i in range(expected_timeout_count):
             self.assertAlmostEqual(
                 datetime.fromtimestamp(timeout_ts[i]),
@@ -342,10 +340,11 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
             hard_deltas={logging.INFO: 30 * 60 * 1000},
             soft_deltas={logging.INFO: delta_ms},
             # delay < soft delta, so timeout push back should occur
-            # timeout = final log occurance + soft delta
-            expected_timeout_count=1,
+            # timeout = final log occurrence + soft delta
+            expected_timeout_count=2,
             expected_timeout_deltas=[
                 (0.2 * 2) + delta_s,  # 2 logs * delay + soft delta
+                (0.2 * 2) + delta_s + 1,  # last timeout + 1 second pad
             ],
         )
 
@@ -358,11 +357,12 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
             hard_deltas={logging.INFO: 30 * 60 * 1000},
             soft_deltas={logging.INFO: delta_ms},
             # delay > soft delta, so every log will timeout
-            expected_timeout_count=3,
+            expected_timeout_count=4,
             expected_timeout_deltas=[
                 delta_s,  # soft delta
                 0.2 + delta_s,  # delay + soft delta
                 0.2 * 2 + delta_s,  # 2 * delay + soft delta
+                0.2 * 2 + delta_s + 1,  # last timeout + 1 second pad
             ],
         )
 
@@ -375,10 +375,11 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
             hard_deltas={logging.INFO: delta_ms},
             soft_deltas={logging.INFO: 3 * 60 * 1000},
             # delay < soft delta, so timeout push back should occur
-            # timeout = final log occurance + soft delta
-            expected_timeout_count=1,
+            # timeout = final log occurrence + soft delta
+            expected_timeout_count=2,
             expected_timeout_deltas=[
                 delta_s,  # hard delta
+                delta_s + 1,  # last timeout + 1 second pad
             ],
         )
 
