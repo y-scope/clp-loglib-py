@@ -107,6 +107,45 @@ with CLPFileReader(Path("example.clp.zst")) as clp_reader:
         log_objects.append(log)
 ```
 
+## Log level timeout feature: CLPLogLevelTimeout
+
+All log handlers support a configurable timeout feature. A (user configurable)
+timeout will be scheduled based on logs' logging level (verbosity) that will
+flush the zstandard frame and allow users to run arbitrary code.
+This feature allows users to automatically perform log related tasks, such as
+periodically uploading their logs for storage. By setting the timeout in
+response to the logs' logging level the responsiveness of a task can be
+adjusted based on the severity of logging level seen.
+
+See the class documentation for specific details.
+
+#### Example code: CLPLogLevelTimeout
+```python
+import logging
+from pathlib import Path
+from clp_logging.handlers import CLPLogLevelTimeout, CLPSockHandler
+
+class LogTimeoutUploader:
+    # Store relevent information/objects to carry out the timeout task
+    def __init__(self, log_path: Path) -> None:
+        self.log_path: Path = log_path
+        return
+
+    # Create any methods necessary to carry out the timeout task
+    def upload_log(self) -> None:
+        # upload the logs to the cloud
+        return
+
+    def timeout(self) -> None:
+        self.upload_log()
+
+log_path: Path = Path("example.clp.zst")
+uploader = LogTimeoutUploader(log_path)
+loglevel_timeout = CLPLogLevelTimeout(uploader.timeout)
+clp_handler = CLPSockHandler(log_path, create_listener=True, loglevel_timeout=loglevel_timeout)
+logging.getLogger(__name__).addHandler(clp_handler)
+```
+
 ## Compatibility
 Tested on Python 3.6 and 3.8 and should work on any newer version.
 Built/packaged on Python 3.8 for convenience regarding type annotation.

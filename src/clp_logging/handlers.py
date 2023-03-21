@@ -406,6 +406,8 @@ class CLPSockListener:
                 if loglevel_timeout:
                     loglevel_timeout.update(loglevel, last_timestamp_ms, log_fn)
                 zstream.write(buf)
+            if loglevel_timeout:
+                loglevel_timeout.timeout()
             zstream.write(EOF_CHAR)
         # tell _server to exit
         CLPSockListener._signaled = True
@@ -683,6 +685,8 @@ class CLPStreamHandler(CLPBaseHandler):
 
     # override
     def close(self) -> None:
+        if self.loglevel_timeout:
+            self.loglevel_timeout.timeout()
         self.zstream.write(EOF_CHAR)
         self.zstream.close()
         self.closed = True
