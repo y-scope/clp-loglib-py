@@ -116,6 +116,7 @@ This feature allows users to automatically perform log related tasks, such as
 periodically uploading their logs for storage. By setting the timeout in
 response to the logs' logging level the responsiveness of a task can be
 adjusted based on the severity of logging level seen.
+An additional timeout is always triggered on closing the logging handler.
 
 See the class documentation for specific details.
 
