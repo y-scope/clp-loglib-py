@@ -298,7 +298,9 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
         # typing for multiprocess.Synchronized* has open issues
         # https://github.com/python/typeshed/issues/8799
         # TODO: when the issue is closed we should update the typing here
-        timeout_ts: SynchronizedArray[c_double] = Array(c_double, [0.0] * expected_timeout_count)
+        # We create one extra index past `expected_timeout_count` so that the
+        # timeout that occurs on close does not error.
+        timeout_ts: SynchronizedArray[c_double] = Array(c_double, [0.0] * (expected_timeout_count + 1))
         timeout_count: Synchronized[int] = cast("Synchronized[int]", Value(c_int, 0))
 
         def timeout_fn() -> None:
@@ -321,7 +323,9 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
         time.sleep(1 + time_to_last_timeout)
 
         self.compare_all_logs()
-        self.assertEqual(timeout_count.value, expected_timeout_count)
+        # We decrement `timeout_count.value` by 1 to account for the extra
+        # timeout on close.
+        self.assertEqual(timeout_count.value - 1, expected_timeout_count)
         for i in range(expected_timeout_count):
             self.assertAlmostEqual(
                 datetime.fromtimestamp(timeout_ts[i]),

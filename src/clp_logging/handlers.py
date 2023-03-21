@@ -127,7 +127,8 @@ class CLPLogLevelTimeout:
     new log event. There is no distinction between the timer that triggers a
     timeout and once a timeout occurs both timers are reset. A timeout will
     always flush the zstandard frame and then call a user supplied function
-    (`timeout_fn`).
+    (`timeout_fn`). An additional timeout is always triggered on closing the
+    logging handler.
 
     The two timers are implemented using `threading.Timer`. Each timer utilizes
     a map that associates each log level to a time delta (in milliseconds).
@@ -406,6 +407,8 @@ class CLPSockListener:
                 if loglevel_timeout:
                     loglevel_timeout.update(loglevel, last_timestamp_ms, log_fn)
                 zstream.write(buf)
+            if loglevel_timeout:
+                loglevel_timeout.timeout()
             zstream.write(EOF_CHAR)
         # tell _server to exit
         CLPSockListener._signaled = True
@@ -683,6 +686,8 @@ class CLPStreamHandler(CLPBaseHandler):
 
     # override
     def close(self) -> None:
+        if self.loglevel_timeout:
+            self.loglevel_timeout.timeout()
         self.zstream.write(EOF_CHAR)
         self.zstream.close()
         self.closed = True
