@@ -388,8 +388,7 @@ class CLPSockListener:
         last_timestamp_ms: int = floor(time.time() * 1000)  # convert to ms and truncate
 
         with log_path.open("ab") as log:
-            ostream: Union[ZstdCompressionWriter, IO[bytes]] =
-                cctx.stream_writer(log) if zstd_compress else log
+            ostream: Union[ZstdCompressionWriter, IO[bytes]] = cctx.stream_writer(log) if zstd_compress else log
             
             if loglevel_timeout:
                 loglevel_timeout.set_ostream(ostream)
@@ -464,8 +463,10 @@ class CLPSockListener:
 
         Thread(
             target=CLPSockListener._aggregator,
-            args=(log_path, log_queue, timestamp_format, timezone, timeout, 
-                  zstd_compress, loglevel_timeout),
+            args=(
+                log_path, log_queue, timestamp_format, timezone, timeout, 
+                  zstd_compress, loglevel_timeout
+            ),
             daemon=False,
         ).start()
 
@@ -540,7 +541,7 @@ class CLPSockHandler(CLPBaseHandler):
         timestamp_format: Optional[str] = None,
         timezone: Optional[str] = None,
         timeout: int = 2,
-        zstd_compress: bool = True
+        zstd_compress: bool = True,
         loglevel_timeout: Optional[CLPLogLevelTimeout] = None,
     ) -> None:
         """
@@ -636,8 +637,7 @@ class CLPStreamHandler(CLPBaseHandler):
 
     def init(self, stream: IO[bytes]) -> None:
         self.cctx: ZstdCompressor = ZstdCompressor()
-        self.ostream: Union[ZstdCompressionWriter, IO[bytes]] = 
-            self.cctx.stream_writer(stream) if self.zstd_compress else stream
+        self.ostream: Union[ZstdCompressionWriter, IO[bytes]] = self.cctx.stream_writer(stream) if self.zstd_compress else stream
         self.last_timestamp_ms: int = floor(time.time() * 1000)  # convert to ms and truncate
         self.ostream.write(
             CLPEncoder.emit_preamble(self.last_timestamp_ms, self.timestamp_format, self.timezone)
@@ -645,8 +645,8 @@ class CLPStreamHandler(CLPBaseHandler):
 
     def __init__(
         self,
-        zstd_compress: bool,
         stream: Optional[IO[bytes]],
+        zstd_compress: bool = True,
         timestamp_format: Optional[str] = None,
         timezone: Optional[str] = None,
         loglevel_timeout: Optional[CLPLogLevelTimeout] = None,
