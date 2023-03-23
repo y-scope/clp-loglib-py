@@ -367,7 +367,7 @@ class CLPSockListener:
         timestamp_format: Optional[str],
         timezone: Optional[str],
         timeout: int,
-        zstd_compress: bool,
+        enable_compression: bool,
         loglevel_timeout: Optional[CLPLogLevelTimeout] = None,
     ) -> int:
         """
@@ -382,7 +382,7 @@ class CLPSockListener:
         :param timezone: Timezone written in preamble to be used when
         generating the timestamp from Unix epoch time.
         :param timeout: timeout in seconds to prevent `Queue.get` from never
-        :param zstd_compress: use the zstd compress if setting to True
+        :param enable_compression: use the zstd compress if setting to True
         returning and not closing properly on signal/EOF_CHAR.
         :return: 0 on successful exit
         """
@@ -391,8 +391,9 @@ class CLPSockListener:
         last_timestamp_ms: int = floor(time.time() * 1000)  # convert to ms and truncate
 
         with log_path.open("ab") as log:
+            # Since the compression may be disabled, context manager is not used
             ostream: Union[ZstdCompressionWriter, IO[bytes]] = (
-                cctx.stream_writer(log) if zstd_compress else log
+                cctx.stream_writer(log) if enable_compression else log
             )
 
             if loglevel_timeout:
@@ -422,7 +423,7 @@ class CLPSockListener:
                 loglevel_timeout.timeout()
             ostream.write(EOF_CHAR)
 
-            if zstd_compress:
+            if enable_compression:
                 ostream.close()
         # tell _server to exit
         CLPSockListener._signaled = True
@@ -436,7 +437,7 @@ class CLPSockListener:
         timestamp_format: Optional[str],
         timezone: Optional[str],
         timeout: int,
-        zstd_compress: bool,
+        enable_compression: bool,
         loglevel_timeout: Optional[CLPLogLevelTimeout] = None,
     ) -> int:
         """
@@ -474,7 +475,7 @@ class CLPSockListener:
                 timestamp_format,
                 timezone,
                 timeout,
-                zstd_compress,
+                enable_compression,
                 loglevel_timeout,
             ),
             daemon=False,
@@ -501,7 +502,7 @@ class CLPSockListener:
         timestamp_format: Optional[str],
         timezone: Optional[str],
         timeout: int,
-        zstd_compress: bool,
+        enable_compression: bool,
         loglevel_timeout: Optional[CLPLogLevelTimeout] = None,
     ) -> int:
         """
@@ -533,7 +534,7 @@ class CLPSockListener:
                     timestamp_format,
                     timezone,
                     timeout,
-                    zstd_compress,
+                    enable_compression,
                     loglevel_timeout,
                 )
             )
@@ -557,7 +558,7 @@ class CLPSockHandler(CLPBaseHandler):
         timestamp_format: Optional[str] = None,
         timezone: Optional[str] = None,
         timeout: int = 2,
-        zstd_compress: bool = True,
+        enable_compression: bool = True,
         loglevel_timeout: Optional[CLPLogLevelTimeout] = None,
     ) -> None:
         """
@@ -585,7 +586,12 @@ class CLPSockHandler(CLPBaseHandler):
         if self.sock.connect_ex(str(self.sock_path)) != 0:
             if create_listener:
                 self.listener_pid = CLPSockListener.fork(
-                    log_path, timestamp_format, timezone, timeout, zstd_compress, loglevel_timeout
+                    log_path,
+                    timestamp_format,
+                    timezone,
+                    timeout,
+                    enable_compression,
+                    loglevel_timeout,
                 )
 
             # If we fail to connect again, the listener failed to resolve any
@@ -654,7 +660,7 @@ class CLPStreamHandler(CLPBaseHandler):
     def init(self, stream: IO[bytes]) -> None:
         self.cctx: ZstdCompressor = ZstdCompressor()
         self.ostream: Union[ZstdCompressionWriter, IO[bytes]] = (
-            self.cctx.stream_writer(stream) if self.zstd_compress else stream
+            self.cctx.stream_writer(stream) if self.enable_compression else stream
         )
         self.last_timestamp_ms: int = floor(time.time() * 1000)  # convert to ms and truncate
         self.ostream.write(
@@ -664,14 +670,14 @@ class CLPStreamHandler(CLPBaseHandler):
     def __init__(
         self,
         stream: Optional[IO[bytes]],
-        zstd_compress: bool = True,
+        enable_compression: bool = True,
         timestamp_format: Optional[str] = None,
         timezone: Optional[str] = None,
         loglevel_timeout: Optional[CLPLogLevelTimeout] = None,
     ) -> None:
         super().__init__()
         self.closed: bool = False
-        self.zstd_compress: bool = zstd_compress
+        self.enable_compression: bool = enable_compression
         if stream is None:
             stream = sys.stderr.buffer
         self.stream: IO[bytes] = stream
@@ -737,12 +743,12 @@ class CLPFileHandler(CLPStreamHandler):
         self,
         fpath: Path,
         mode: str = "ab",
-        zstd_compress: bool = True,
+        enable_compression: bool = True,
         timestamp_format: Optional[str] = None,
         timezone: Optional[str] = None,
         loglevel_timeout: Optional[CLPLogLevelTimeout] = None,
     ) -> None:
         self.fpath: Path = fpath
         super().__init__(
-            open(fpath, mode), zstd_compress, timestamp_format, timezone, loglevel_timeout
+            open(fpath, mode), enable_compression, timestamp_format, timezone, loglevel_timeout
         )
