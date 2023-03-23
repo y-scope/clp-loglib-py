@@ -424,6 +424,8 @@ class CLPSockListener:
             ostream.write(EOF_CHAR)
 
             if enable_compression:
+                # Since we are not using context manager, the ostream should be 
+                # explicitly closed.
                 ostream.close()
         # tell _server to exit
         CLPSockListener._signaled = True
