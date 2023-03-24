@@ -275,7 +275,6 @@ class CLPBaseReader(metaclass=ABCMeta):
                 )
                 if token_type < 0:
                     if token_type < -2:
-                        # Error occured when decoding the token.
                         raise RuntimeError(
                             f"Error decoding token: 0x{token.hex()}, type: {token_type}"
                         )
