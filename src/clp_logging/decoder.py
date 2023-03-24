@@ -3,7 +3,6 @@ from typing import Dict, Optional, Tuple
 
 from clp_logging.protocol import (
     BYTE_ORDER,
-    EOF_CHAR,
     ID_EOF,
     ID_LOGTYPE,
     ID_MASK,
@@ -117,28 +116,35 @@ class CLPDecoder:
         """
         type_byte: memoryview = src[pos : pos + 1]
         token_type: int = type_byte[0]
+        token_id: int = token_type & ID_MASK
         pos += SIZEOF_BYTE
+        src_len: int = len(src)
+        if token_id == ID_EOF:
+            if src_len == pos:
+                # This is a single null byte, which can indicate the actual EOF,
+                # or it might be a partial state received from the socket.
+                # Use a unique return value to flag this case,
+                # and leave the caller to make the judgement.
+                return -2, type_byte, pos + 1
+            # Calling `zstream.flush(FLUSH_FRAME)` seems to leave
+            # \x00\x00\x00\xc9 between frames.
+            if pos + 4 >= src_len:
+                return -1, type_byte, pos + 4
+            if b"\x00\x00\x00\xc9" == src[pos : pos + 4]:
+                return token_type, type_byte, pos + 4
+            else:
+                return -5, type_byte, pos + 1
 
         info: Optional[Tuple[int, bool]] = SIZEOF.get(type_byte.tobytes())
         if not info:
             return -3, type_byte, pos
 
-        token_id: int = token_type & ID_MASK
-
         size: int
         signed: bool
         size, signed = info
         end: int = pos + size
-        src_len: int = len(src)
         if end >= src_len:
-            if token_id == ID_EOF and src_len == pos:
-                # This is a single null byte, which can indicate the actual EOF,
-                # or it might be a partial state received from the socket.
-                # Use a unique return value to flag this case,
-                # and leave the caller to make the judgement.
-                return -2, type_byte, end
-            else:
-                return -1, type_byte, end
+            return -1, type_byte, end
 
         if token_id == ID_VAR:
             if type_byte == VAR_COMPACT_ENCODING:
@@ -162,12 +168,5 @@ class CLPDecoder:
         elif token_id == ID_TIMESTAMP:
             return token_type, src[pos:end], end
 
-        elif token_id == ID_EOF:
-            # Calling `zstream.flush(FLUSH_FRAME)` seems to leave
-            # \x00\x00\x00\xc9 between frames.
-            if b"\x00\x00\x00\xc9" == src[pos:end]:
-                return token_type, type_byte, end
-            else:
-                return -5, type_byte, end
         else:
             return -4, type_byte, end
