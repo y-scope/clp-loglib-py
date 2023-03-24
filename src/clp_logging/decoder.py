@@ -123,15 +123,23 @@ class CLPDecoder:
         if not info:
             return -2, type_byte, pos
 
+        token_id: int = token_type & ID_MASK
+
         size: int
         signed: bool
         size, signed = info
         end: int = pos + size
         src_len: int = len(src)
         if end >= src_len:
-            return -1, type_byte, end
+            if token_id == ID_EOF and src_len == pos:
+                # This is a single null byte, which can indicate the actual EOF, 
+                # or it might be a partial state received from the socket.
+                # Use a unique return value to flag this case,
+                # and leave the caller to make the judgement.
+                return -5, type_byte, end
+            else:
+                return -1, type_byte, end
 
-        token_id: int = token_type & ID_MASK
         if token_id == ID_VAR:
             if type_byte == VAR_COMPACT_ENCODING:
                 return token_type, src[pos:end], end
