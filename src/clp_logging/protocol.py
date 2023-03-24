@@ -91,7 +91,4 @@ SIZEOF: Dict[bytes, Tuple[int, bool]] = {
     TIMESTAMP_DELTA_BYTE: (SIZEOF_BYTE, True),
     TIMESTAMP_DELTA_SHORT: (SIZEOF_SHORT, True),
     TIMESTAMP_DELTA_INT: (SIZEOF_INT, True),
-    # This is used to handle distinguishing null bytes from flushing a
-    # zstandard frame and actual eof
-    EOF_CHAR: (SIZEOF_INT, False),
 }
