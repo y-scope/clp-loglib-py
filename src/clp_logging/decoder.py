@@ -112,8 +112,8 @@ class CLPDecoder:
         :param pos: The position in `src` to begin decoding from
         :return: A tuple of the token type byte, the token in bytes, and the
         index read up to in `src` (including `pos`). Token type is 0 for
-        EOF_CHAR, -1 if `src` is exhausted before completing a token, or -2 on
-        error.
+        EOF_CHAR, -1 if `src` is exhausted before completing a token, -2 if
+        it is exhausted with a null byte, or < -2 for other errors.
         """
         type_byte: memoryview = src[pos : pos + 1]
         token_type: int = type_byte[0]
@@ -121,7 +121,7 @@ class CLPDecoder:
 
         info: Optional[Tuple[int, bool]] = SIZEOF.get(type_byte.tobytes())
         if not info:
-            return -2, type_byte, pos
+            return -3, type_byte, pos
 
         token_id: int = token_type & ID_MASK
 
@@ -132,11 +132,11 @@ class CLPDecoder:
         src_len: int = len(src)
         if end >= src_len:
             if token_id == ID_EOF and src_len == pos:
-                # This is a single null byte, which can indicate the actual EOF, 
+                # This is a single null byte, which can indicate the actual EOF,
                 # or it might be a partial state received from the socket.
                 # Use a unique return value to flag this case,
                 # and leave the caller to make the judgement.
-                return -5, type_byte, end
+                return -2, type_byte, end
             else:
                 return -1, type_byte, end
 
@@ -168,6 +168,6 @@ class CLPDecoder:
             if b"\x00\x00\x00\xc9" == src[pos:end]:
                 return token_type, type_byte, end
             else:
-                return -4, type_byte, end
+                return -5, type_byte, end
         else:
-            return -3, type_byte, end
+            return -4, type_byte, end

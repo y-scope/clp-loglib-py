@@ -273,12 +273,14 @@ class CLPBaseReader(metaclass=ABCMeta):
                 token_type, token, pos = CLPDecoder.decode_token(
                     self.view[offset : self.valid_buf_len]
                 )
-                if token_type == -1 or token_type == -5:  # Read more
-                    break
-                elif token_type < 0:
-                    raise RuntimeError(
-                        f"Error decoding token: 0x{token.hex()}, type: {token_type}"
-                    )
+                if token_type < 0:
+                    if token_type < -2:
+                        # Error occured when decoding the token.
+                        raise RuntimeError(
+                            f"Error decoding token: 0x{token.hex()}, type: {token_type}"
+                        )
+                    else:  # Read more
+                        break
 
                 offset += pos
                 # This occurs when we have seen a null byte, but were able to
