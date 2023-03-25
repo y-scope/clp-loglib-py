@@ -2,13 +2,14 @@ from abc import ABCMeta, abstractmethod
 from datetime import datetime, tzinfo
 from pathlib import Path
 from types import TracebackType
-from typing import IO, Iterator, List, Match, Optional, Type, Union
+from typing import IO, Iterator, List, Match, Optional, Tuple, Type, Union
 
 import dateutil.tz
 from sys import stderr
 from zstandard import ZstdDecompressor, ZstdDecompressionReader
 
 from clp_logging.decoder import CLPDecoder
+from clp_logging.encoder import CLPEncoder
 from clp_logging.protocol import (
     BYTE_ORDER,
     DELIM_DICT,
@@ -404,3 +405,146 @@ class CLPFileReader(CLPStreamReader):
     def dump(self) -> None:
         for log in self:
             stderr.write(log.formatted_msg)
+
+
+class CLPSegmentStreaming:
+    def __init__(
+        self,
+        istream: IO[bytes],
+        ostream: IO[bytes],
+        max_bytes_to_write: Optional[int] = None,
+        metadata: Optional[Metadata] = None,
+        chunk_size: int = 4096,
+    ) -> None:
+        self.istream: IO[bytes] = istream
+        self.ostream: IO[bytes] = ostream
+        self._buf: bytearray = bytearray(chunk_size)
+        self.view: memoryview = memoryview(self._buf)
+        self.valid_buf_len: int = 0
+        self.metadata: Optional[Metadata] = metadata
+        self.last_timestamp_ms: int
+        self.init_pos: int = 0
+        self.total_bytes_read: int = 0
+        self.total_bytes_written: int = 0
+        self.max_bytes_to_write: Optional[int] = max_bytes_to_write
+        self.first_stream: bool = True
+
+    def readinto_buf(self, offset: int) -> int:
+        bytes_read: int = self.istream.readinto(self.view[offset:])
+        self.total_bytes_read += bytes_read
+        return bytes_read
+
+    def init_preamble(self) -> Optional[bytearray]:
+        if not self.metadata:
+            # initialize metadata
+            self.metadata, self.init_pos = CLPDecoder.decode_preamble(self.view, 0)
+        if self.metadata:
+            preamble: bytearray = CLPEncoder.emit_preamble(
+                self.metadata[METADATA_REFERENCE_TIMESTAMP_KEY],
+                self.metadata[METADATA_TIMESTAMP_PATTERN_KEY],
+                self.metadata[METADATA_TZ_ID_KEY],
+            )
+            self.last_timestamp_ms = int(self.metadata[METADATA_REFERENCE_TIMESTAMP_KEY])
+            return preamble
+        return None
+
+    def generate_return_metadata(self) -> Metadata:
+        self.metadata[METADATA_REFERENCE_TIMESTAMP_KEY] = self.last_timestamp_ms
+        return self.metadata
+
+    def ostream_out_of_write_space(self, len_to_write: int) -> bool:
+        return (
+            self.max_bytes_to_write
+            and (self.total_bytes_written + len_to_write + 1) > self.max_bytes_to_write
+        )
+
+    def stream_ir_segment(self) -> Tuple[int, Optional[Metadata]]:
+        if not self.first_stream:
+            raise RuntimeError("This object has already streamed.")
+        self.first_stream = False
+
+        bytes_read: int = self.readinto_buf(0)
+        if bytes_read == 0:
+            return 0, None
+        elif bytes_read < 0:
+            raise RuntimeError("Failed to read from input stream.")
+        self.valid_buf_len = bytes_read
+
+        preamble = self.init_preamble()
+        if not preamble:
+            raise RuntimeError("Failed to read initial IR metadata.")
+
+        if self.ostream_out_of_write_space(len(preamble)):
+            raise RuntimeError("Output stream limit too small to fit IR metadata.")
+
+        bytes_written = self.ostream.write(preamble)
+        if bytes_written <= 0:
+            raise RuntimeError("Failed to write into output stream.")
+        self.total_bytes_written += bytes_written
+
+        offset: int = self.init_pos
+        log_buf: bytearray = bytearray(0)
+        while True:
+            token: bytes
+            while True:
+                token_type: int
+                token_type, token, pos = CLPDecoder.decode_token(
+                    self.view[offset : self.valid_buf_len]
+                )
+                if token_type < 0:
+                    if token_type < -2:
+                        raise RuntimeError(
+                            f"Error decoding token: 0x{token.hex()}, type: {token_type}"
+                        )
+                    else:
+                        break  # Attempt to read more
+
+                # This occurs when we have seen a null byte, but were able to
+                # read past it from the zstandard stream. This occurs when a
+                # zstandard frame was flushed. After we have incremented offset
+                # past the zstandard bytes we can continue to read tokens.
+                if ID_EOF == token_type:
+                    continue
+
+                log_buf += self.view[offset : offset + pos]
+                offset += pos
+
+                token_id: int = token_type & ID_MASK
+                if ID_TIMESTAMP == token_id:
+                    log_length: int = len(log_buf)
+                    if self.ostream_out_of_write_space(log_length):
+                        bytes_consumed: int = (
+                            self.total_bytes_read - log_length - (self.valid_buf_len - offset)
+                        )
+                        return bytes_consumed, self.generate_return_metadata()
+                    # Increment the last recorded timestamp
+                    self.last_timestamp_ms += int.from_bytes(token, BYTE_ORDER, signed=True)
+                    bytes_written = self.ostream.write(log_buf)
+                    if bytes_written <= 0:
+                        raise RuntimeError("Failed to write into out stream.")
+                    self.total_bytes_written += bytes_written
+                    log_buf.clear()
+
+            # Shift valid bytes to the start to make room for reading
+            # Grow the buffer if more than half is still valid
+            valid: int = self.valid_buf_len - offset
+            self.view[:valid] = self.view[offset : self.valid_buf_len]
+            if valid > len(self._buf) // 2:
+                tmp = bytearray(len(self._buf) * 2)
+                tmp[:valid] = self.view
+                self.view.release()
+                self._buf = tmp
+                self.view = memoryview(self._buf)
+
+            bytes_read: int = self.readinto_buf(valid)
+            if bytes_read == 0:
+                # No more to read. This is the end of the current segment.
+                self.ostream.write(EOF_CHAR)
+                # Log in the current buffer is not written into ostream.
+                bytes_consumed: int = self.total_bytes_read - len(log_buf) - valid
+                return bytes_consumed, self.generate_return_metadata()
+            elif bytes_read < 0:
+                raise RuntimeError("Failed to read from input stream.")
+
+            offset = 0
+            self.valid_buf_len = valid + bytes_read
