@@ -52,9 +52,11 @@ def _init_timeinfo(fmt: Optional[str], tz: Optional[str]) -> Tuple[str, str]:
     if not tz:
         tzf = dateutil.tz.gettz()
         if tzf:
-            if tzf._filename == "/etc/localtime":
-                tzp = Path.resolve(Path(tzf._filename))
+            if tzf._filename == "/etc/localtime":  # type: ignore
+                tzp = Path.resolve(Path(tzf._filename))  # type: ignore
             tz = "/".join([tzp.parent.name, tzp.name])
+        else:
+            tz = "UCT"
     return fmt, tz
 
 
@@ -424,7 +426,7 @@ class CLPSockListener:
             ostream.write(EOF_CHAR)
 
             if enable_compression:
-                # Since we are not using context manager, the ostream should be 
+                # Since we are not using context manager, the ostream should be
                 # explicitly closed.
                 ostream.close()
         # tell _server to exit

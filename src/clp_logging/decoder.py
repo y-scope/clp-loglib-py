@@ -3,6 +3,7 @@ from typing import Dict, Optional, Tuple
 
 from clp_logging.protocol import (
     BYTE_ORDER,
+    EOF_CHAR,
     ID_EOF,
     ID_LOGTYPE,
     ID_MASK,
@@ -111,29 +112,13 @@ class CLPDecoder:
         :param pos: The position in `src` to begin decoding from
         :return: A tuple of the token type byte, the token in bytes, and the
         index read up to in `src` (including `pos`). Token type is 0 for
-        EOF_CHAR, -1 if `src` is exhausted before completing a token, -2 if
-        it is exhausted with a null byte, or < -2 for other errors.
+        EOF_CHAR, -1 if `src` is exhausted before completing a token, or < -1
+        for other errors.
         """
-        type_byte: memoryview = src[pos : pos + 1]
-        token_type: int = type_byte[0]
-        token_id: int = token_type & ID_MASK
+        type_byte: memoryview = src[pos : pos + SIZEOF_BYTE]
         pos += SIZEOF_BYTE
-        src_len: int = len(src)
-        if token_id == ID_EOF:
-            if src_len == pos:
-                # This is a single null byte, which can indicate the actual EOF,
-                # or it might be a partial state received from the socket.
-                # Use a unique return value to flag this case,
-                # and leave the caller to make the judgement.
-                return -2, type_byte, pos + 1
-            # Calling `zstream.flush(FLUSH_FRAME)` seems to leave
-            # \x00\x00\x00\xc9 between frames.
-            if pos + 4 >= src_len:
-                return -1, type_byte, pos + 4
-            if b"\x00\x00\x00\xc9" == src[pos : pos + 4]:
-                return token_type, type_byte, pos + 4
-            else:
-                return -5, type_byte, pos + 1
+        if type_byte == EOF_CHAR:
+            return ID_EOF, type_byte, pos
 
         info: Optional[Tuple[int, bool]] = SIZEOF.get(type_byte.tobytes())
         if not info:
@@ -143,9 +128,12 @@ class CLPDecoder:
         signed: bool
         size, signed = info
         end: int = pos + size
+        src_len: int = len(src)
         if end >= src_len:
             return -1, type_byte, end
 
+        token_type: int = type_byte[0]
+        token_id: int = token_type & ID_MASK
         if token_id == ID_VAR:
             if type_byte == VAR_COMPACT_ENCODING:
                 return token_type, src[pos:end], end
@@ -169,4 +157,4 @@ class CLPDecoder:
             return token_type, src[pos:end], end
 
         else:
-            return -4, type_byte, end
+            return -2, type_byte, end

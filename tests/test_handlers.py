@@ -25,7 +25,8 @@ from clp_logging.readers import CLPFileReader
 LOG_DIR: Path = Path("unittest-logs")
 
 
-class DtStreamHandler(logging.StreamHandler):
+# TODO: revisit type ignore if minimum python version increased
+class DtStreamHandler(logging.StreamHandler):  # type: ignore
     """
     `logging` handler using `datetime` for the timestamp rather than `time`
     (used internally by `logging`). Necessary for correct comparison with CLP
@@ -65,12 +66,15 @@ class TestCLPBase(unittest.TestCase):
     between different handlers.
     However, we cannot mark it as abstract as `unittest` will still `__init__`
     an instance before `load_tests` is run (and will error out if any method
-    is marked abstract)
+    is marked abstract).
+    Non-base classes have shortened names to avoid errors with socket name
+    length.
     """
 
-    clp_handler: logging.Handler
+    clp_handler: CLPBaseHandler
     raw_log_path: Path
     clp_log_path: Path
+    enable_compression: bool
 
     # override
     @classmethod
@@ -82,14 +86,14 @@ class TestCLPBase(unittest.TestCase):
     # override
     def setUp(self) -> None:
         self.raw_log_path: Path = LOG_DIR / Path(f"{self.id()}.log")
-        self.clp_log_path: Path = LOG_DIR / Path(f"{self.id()}.clp.zst")
+        self.clp_log_path: Path = LOG_DIR / Path(f"{self.id()}.clp")
         if self.raw_log_path.exists():
             self.raw_log_path.unlink()
         if self.clp_log_path.exists():
             self.clp_log_path.unlink()
 
     def read_clp(self) -> List[str]:
-        with CLPFileReader(self.clp_log_path) as logf:
+        with CLPFileReader(self.clp_log_path, enable_compression=self.enable_compression) as logf:
             return [log.formatted_msg for log in logf]
 
     def read_raw(self) -> List[str]:
@@ -136,7 +140,7 @@ class TestCLPBase(unittest.TestCase):
                 clp_timestamp: datetime = dateutil.parser.isoparse(clp_time_str)
                 raw_timestamp: datetime = dateutil.parser.isoparse(raw_time_str)
                 self.assertAlmostEqual(
-                    clp_timestamp, raw_timestamp, delta=timedelta(milliseconds=8)
+                    clp_timestamp, raw_timestamp, delta=timedelta(milliseconds=32)
                 )
 
             clp_msg: str = " ".join(clp_log_split[2:])
@@ -305,7 +309,7 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
         def timeout_fn() -> None:
             nonlocal timeout_ts
             nonlocal timeout_count
-            timeout_ts[timeout_count.value] = time.time()
+            timeout_ts[timeout_count.value] = time.time()  # type: ignore
             timeout_count.value += 1
 
         self.loglevel_timeout = CLPLogLevelTimeout(timeout_fn, hard_deltas, soft_deltas)
@@ -326,9 +330,9 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
         self.assertEqual(timeout_count.value, expected_timeout_count)
         for i in range(expected_timeout_count):
             self.assertAlmostEqual(
-                datetime.fromtimestamp(timeout_ts[i]),
+                datetime.fromtimestamp(timeout_ts[i]),  # type: ignore
                 datetime.fromtimestamp(start_ts + expected_timeout_deltas[i]),
-                delta=timedelta(milliseconds=128),
+                delta=timedelta(milliseconds=64),
             )
 
     def test_pushback_soft_timeout(self) -> None:
@@ -344,7 +348,7 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
             expected_timeout_count=2,
             expected_timeout_deltas=[
                 (0.2 * 2) + delta_s,  # 2 logs * delay + soft delta
-                (0.2 * 2) + delta_s + 1,  # last timeout + 1 second pad
+                (0.2 * 2) + delta_s + 0.256,  # last timeout + 256ms pad
             ],
         )
 
@@ -361,8 +365,8 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
             expected_timeout_deltas=[
                 delta_s,  # soft delta
                 0.2 + delta_s,  # delay + soft delta
-                0.2 * 2 + delta_s,  # 2 * delay + soft delta
-                0.2 * 2 + delta_s + 1,  # last timeout + 1 second pad
+                (0.2 * 2) + delta_s,  # 2 * delay + soft delta
+                (0.2 * 2) + delta_s + 0.256,  # last timeout + 256ms pad
             ],
         )
 
@@ -379,12 +383,26 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
             expected_timeout_count=2,
             expected_timeout_deltas=[
                 delta_s,  # hard delta
-                delta_s + 1,  # last timeout + 1 second pad
+                delta_s + 0.256,  # last timeout + 256ms pad
+            ],
+        )
+
+    def test_end_timeout(self) -> None:
+        self._test_timeout(
+            loglevels=[logging.INFO, logging.INFO, logging.INFO],
+            delay=0.2,
+            hard_deltas={logging.INFO: 30 * 60 * 1000},
+            soft_deltas={logging.INFO: 3 * 60 * 1000},
+            # no deltas occur
+            # timeout = when close is called roughly after last log
+            expected_timeout_count=1,
+            expected_timeout_deltas=[
+                (0.2 * 3) + 0.256,  # last log delay + 256ms pad
             ],
         )
 
 
-class TestCLPSockHandler(TestCLPHandlerBase):
+class TestCLPSockHandlerBase(TestCLPHandlerBase):
     # override
     def setUp(self) -> None:
         super().setUp()
@@ -394,35 +412,8 @@ class TestCLPSockHandler(TestCLPHandlerBase):
 
         self.clp_handler: CLPSockHandler
         try:
-            self.clp_handler = CLPSockHandler(self.clp_log_path, create_listener=True)
-        except SystemExit as e:
-            self.assertEqual(e.code, 0)
-            # hack to exit the forked listener process without being caught and
-            # reported by unittest
-            os._exit(0)
-        self.setup_logging()
-
-    # override
-    def close(self) -> None:
-        self.clp_handler.stop_listener()
-        os.waitpid(self.clp_handler.listener_pid, 0)
-        super().close()
-
-
-class TestCLPSockHandlerLogLevelTimeout(TestCLPLogLevelTimeoutBase):
-    # override
-    def setUp(self) -> None:
-        TestCLPLogLevelTimeoutBase.setUp(self)
-        self.sock_path: Path = self.clp_log_path.with_suffix(".sock")
-        if self.sock_path.exists():
-            self.sock_path.unlink()
-
-    # override
-    def _setup_handler(self) -> None:
-        self.clp_handler: CLPSockHandler
-        try:
             self.clp_handler = CLPSockHandler(
-                self.clp_log_path, create_listener=True, loglevel_timeout=self.loglevel_timeout
+                self.clp_log_path, create_listener=True, enable_compression=self.enable_compression
             )
         except SystemExit as e:
             self.assertEqual(e.code, 0)
@@ -438,19 +429,104 @@ class TestCLPSockHandlerLogLevelTimeout(TestCLPLogLevelTimeoutBase):
         super().close()
 
 
-class TestCLPStreamHandler(TestCLPHandlerBase):
+class TestCLPSock_ZSTD(TestCLPSockHandlerBase):
     # override
     def setUp(self) -> None:
+        self.enable_compression = True
         super().setUp()
-        self.clp_handler: CLPStreamHandler = CLPFileHandler(self.clp_log_path)
+
+
+class TestCLPSock_RAW(TestCLPSockHandlerBase):
+    # override
+    def setUp(self) -> None:
+        self.enable_compression = False
+        super().setUp()
+
+
+class TestCLPSockHandlerLogLevelTimeoutBase(TestCLPLogLevelTimeoutBase):
+    # override
+    def setUp(self) -> None:
+        TestCLPLogLevelTimeoutBase.setUp(self)
+        self.sock_path: Path = self.clp_log_path.with_suffix(".sock")
+        if self.sock_path.exists():
+            self.sock_path.unlink()
+
+    # override
+    def _setup_handler(self) -> None:
+        self.clp_handler: CLPSockHandler
+        try:
+            self.clp_handler = CLPSockHandler(
+                self.clp_log_path,
+                create_listener=True,
+                loglevel_timeout=self.loglevel_timeout,
+                enable_compression=self.enable_compression,
+            )
+        except SystemExit as e:
+            self.assertEqual(e.code, 0)
+            # hack to exit the forked listener process without being caught and
+            # reported by unittest
+            os._exit(0)
+        self.setup_logging()
+
+    # override
+    def close(self) -> None:
+        self.clp_handler.stop_listener()
+        os.waitpid(self.clp_handler.listener_pid, 0)
+        super().close()
+
+
+class TestCLPSock_LLT(TestCLPSockHandlerLogLevelTimeoutBase):
+    # override
+    def setUp(self) -> None:
+        self.enable_compression = True
+        super().setUp()
+
+
+class TestCLPSock_LLT_RAW(TestCLPSockHandlerLogLevelTimeoutBase):
+    # override
+    def setUp(self) -> None:
+        self.enable_compression = False
+        super().setUp()
+
+
+class TestCLPStream_ZSTD(TestCLPHandlerBase):
+    # override
+    def setUp(self) -> None:
+        self.enable_compression = True
+        super().setUp()
+        self.clp_handler: CLPStreamHandler = CLPFileHandler(
+            self.clp_log_path, enable_compression=True
+        )
         self.setup_logging()
 
 
-class TestCLPStreamHandlerLogLevelTimeout(TestCLPLogLevelTimeoutBase):
+class TestCLPStream_RAW(TestCLPHandlerBase):
+    # override
+    def setUp(self) -> None:
+        self.enable_compression = False
+        super().setUp()
+        self.clp_handler: CLPStreamHandler = CLPFileHandler(
+            self.clp_log_path, enable_compression=False
+        )
+        self.setup_logging()
+
+
+class TestCLPStream_LLT_ZSTD(TestCLPLogLevelTimeoutBase):
     # override
     def _setup_handler(self) -> None:
+        self.enable_compression = True
         self.clp_handler = CLPFileHandler(
-            self.clp_log_path, loglevel_timeout=self.loglevel_timeout
+            self.clp_log_path, loglevel_timeout=self.loglevel_timeout, enable_compression=True
+        )
+        self.setup_logging()
+
+
+class TestCLPStream_LLT_RAW(TestCLPLogLevelTimeoutBase):
+    # override
+    def _setup_handler(self) -> None:
+        self.enable_compression = False
+        self.clp_handler = CLPFileHandler(
+            self.clp_log_path, loglevel_timeout=self.loglevel_timeout, enable_compression=False
         )
         self.setup_logging()
 
