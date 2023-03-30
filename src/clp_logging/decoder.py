@@ -115,6 +115,9 @@ class CLPDecoder:
         EOF_CHAR, -1 if `src` is exhausted before completing a token, or < -1
         for other errors.
         """
+        # We cannot directly get a single byte at pos with src[pos] as this
+        # will return an integer and we still need to do byte comparisons
+        # later.
         type_byte: memoryview = src[pos : pos + SIZEOF_BYTE]
         pos += SIZEOF_BYTE
         if type_byte == EOF_CHAR:
