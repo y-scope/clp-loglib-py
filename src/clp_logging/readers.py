@@ -384,7 +384,8 @@ class CLPStreamReader(CLPBaseReader):
     def close(self) -> None:
         if self.zstream:
             self.zstream.close()  # type: ignore
-        self.stream.close()
+        else:
+            self.stream.close()
 
 
 class CLPFileReader(CLPStreamReader):
