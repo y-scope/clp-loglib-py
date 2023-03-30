@@ -407,11 +407,12 @@ class CLPFileReader(CLPStreamReader):
             stderr.write(log.formatted_msg)
 
 
-class CLPSegmentStreaming:
+class CLPSegmentStreamingReader:
     def __init__(
         self,
         istream: IO[bytes],
         ostream: IO[bytes],
+        offset: Optional[int] = None,
         max_bytes_to_write: Optional[int] = None,
         metadata: Optional[Metadata] = None,
         chunk_size: int = 4096,
@@ -427,6 +428,7 @@ class CLPSegmentStreaming:
         self.total_bytes_read: int = 0
         self.total_bytes_written: int = 0
         self.max_bytes_to_write: Optional[int] = max_bytes_to_write
+        self.offset: Optional[int] = offset
         self.first_stream: bool = True
 
     def readinto_buf(self, offset: int) -> int:
@@ -436,8 +438,17 @@ class CLPSegmentStreaming:
 
     def init_preamble(self) -> Optional[bytearray]:
         if not self.metadata:
-            # initialize metadata
-            self.metadata, self.init_pos = CLPDecoder.decode_preamble(self.view, 0)
+            try:
+                self.metadata, self.pos = CLPDecoder.decode_preamble(self.view, 0)
+            except Exception as e:
+                if len(self._buf) == self.valid_buf_len:
+                    raise RuntimeError(
+                        "CLPDecoder.decode_preamble failed; CLPReader chunk_size likely too small."
+                        f" [self._buf/chunk_size({len(self._buf)}) == self.valid_buf_len"
+                        f"({self.valid_buf_len})]"
+                    ) from e
+                else:
+                    raise
         if self.metadata:
             preamble: bytearray = CLPEncoder.emit_preamble(
                 self.metadata[METADATA_REFERENCE_TIMESTAMP_KEY],
@@ -462,6 +473,16 @@ class CLPSegmentStreaming:
         if not self.first_stream:
             raise RuntimeError("This object has already streamed.")
         self.first_stream = False
+
+        if self.offset and 0 != self.offset:
+            # Seek the input stream to the given position.
+            # By default, it should seek from the beginning.
+            if not self.metadata:
+                raise RuntimeError(
+                    "To seek the IR into a none-zero position, a metadata from last read must be"
+                    " given."
+                )
+            self.istream.seek(self.offset)
 
         bytes_read: int = self.readinto_buf(0)
         if bytes_read == 0:
@@ -499,12 +520,9 @@ class CLPSegmentStreaming:
                     else:
                         break  # Attempt to read more
 
-                # This occurs when we have seen a null byte, but were able to
-                # read past it from the zstandard stream. This occurs when a
-                # zstandard frame was flushed. After we have incremented offset
-                # past the zstandard bytes we can continue to read tokens.
+                # We have reached the end of stream.
                 if ID_EOF == token_type:
-                    continue
+                    break
 
                 log_buf += self.view[offset : offset + pos]
                 offset += pos
@@ -548,3 +566,22 @@ class CLPSegmentStreaming:
 
             offset = 0
             self.valid_buf_len = valid + bytes_read
+
+
+class CLPSegmentStreaming:
+    @staticmethod
+    def read(
+        istream: IO[bytes],
+        ostream: IO[bytes],
+        offset: Optional[int] = None,
+        max_bytes_to_write: Optional[int] = None,
+        metadata: Optional[Metadata] = None,
+    ) -> Tuple[int, Optional[Metadata]]:
+        reader: CLPSegmentStreamingReader = CLPSegmentStreamingReader(
+            istream=istream,
+            ostream=ostream,
+            offset=offset,
+            max_bytes_to_write=max_bytes_to_write,
+            metadata=metadata,
+        )
+        return reader.stream_ir_segment()
