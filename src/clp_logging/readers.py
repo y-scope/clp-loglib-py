@@ -164,7 +164,17 @@ class CLPBaseReader(metaclass=ABCMeta):
         self.valid_buf_len = self.readinto_buf(0)
         if self.valid_buf_len <= 0:
             raise RuntimeError("readinto_buf for preamble failed")
-        self.metadata, self.pos = CLPDecoder.decode_preamble(self.view, 0)
+        try:
+            self.metadata, self.pos = CLPDecoder.decode_preamble(self.view, 0)
+        except Exception as e:
+            if len(self._buf) == self.valid_buf_len:
+                raise RuntimeError(
+                    "CLPDecoder.decode_preamble failed; CLPReader chunk_size likely too small."
+                    f" [self._buf/chunk_size({len(self._buf)}) == self.valid_buf_len"
+                    f"({self.valid_buf_len})]"
+                ) from e
+            else:
+                raise
         if self.metadata:
             self.last_timestamp_ms = int(self.metadata[METADATA_REFERENCE_TIMESTAMP_KEY])
             # We do not use the timestamp pattern from the preamble as it may
@@ -273,21 +283,15 @@ class CLPBaseReader(metaclass=ABCMeta):
                 token_type, token, pos = CLPDecoder.decode_token(
                     self.view[offset : self.valid_buf_len]
                 )
-                if token_type < 0:
-                    if token_type < -2:
-                        raise RuntimeError(
-                            f"Error decoding token: 0x{token.hex()}, type: {token_type}"
-                        )
-                    else:  # Read more
-                        break
-
-                offset += pos
-                # This occurs when we have seen a null byte, but were able to
-                # read past it from the zstandard stream. This occurs when a
-                # zstandard frame was flushed. After we have incremented offset
-                # past the zstandard bytes we can continue to read tokens.
                 if token_type == ID_EOF:
-                    continue
+                    return 0
+                elif token_type == -1:
+                    break
+                elif token_type < -1:
+                    raise RuntimeError(
+                        f"Error decoding token: 0x{token.hex()}, type: {token_type}"
+                    )
+                offset += pos
 
                 if log:
                     self._store_token(log, token_type, token)
@@ -311,9 +315,7 @@ class CLPBaseReader(metaclass=ABCMeta):
             offset = 0
 
             ret: int = self.readinto_buf(valid)
-            if ret == 0 and token == EOF_CHAR:
-                return 0
-            elif ret < 0:
+            if ret < 0:
                 return -1
             self.valid_buf_len = valid + ret
 
@@ -354,35 +356,50 @@ class CLPStreamReader(CLPBaseReader):
     """
 
     def __init__(
-        self, stream: IO[bytes], timestamp_format: Optional[str] = None, chunk_size: int = 4096
+        self,
+        stream: IO[bytes],
+        timestamp_format: Optional[str] = None,
+        chunk_size: int = 4096,
+        enable_compression: bool = True,
     ) -> None:
         super().__init__(timestamp_format, chunk_size)
         self.stream: IO[bytes] = stream
-        self.dctx: ZstdDecompressor = ZstdDecompressor()
-        self.zstream: ZstdDecompressionReader = self.dctx.stream_reader(
-            self.stream, read_across_frames=True
-        )
+        self.dctx: Optional[ZstdDecompressor] = None
+        self.zstream: Optional[ZstdDecompressionReader] = None
+        if enable_compression:
+            self.dctx = ZstdDecompressor()
+            self.zstream = self.dctx.stream_reader(self.stream, read_across_frames=True)
 
     def readinto_buf(self, offset: int) -> int:
         """
-        Use Zstandard to decompress the CLP IR stream.
+        Read the CLP IR stream directly or through Zstandard decompression.
         :return: Bytes read (0 for EOF), < 0 on error
         """
-        return self.zstream.readinto(self.view[offset:])
+        if self.zstream:
+            return self.zstream.readinto(self.view[offset:])
+        else:
+            # see https://github.com/python/typing/issues/659
+            return self.stream.readinto(self.view[offset:])  # type: ignore
 
     def close(self) -> None:
-        self.zstream.close()
-        self.stream.close()
+        if self.zstream:
+            self.zstream.close()  # type: ignore
+        else:
+            self.stream.close()
 
 
 class CLPFileReader(CLPStreamReader):
     """Wrapper class that calls `open` for convenience."""
 
     def __init__(
-        self, fpath: Path, timestamp_format: Optional[str] = None, chunk_size: int = 4096
+        self,
+        fpath: Path,
+        timestamp_format: Optional[str] = None,
+        chunk_size: int = 4096,
+        enable_compression: bool = True,
     ) -> None:
         self.path: Path = fpath
-        super().__init__(open(fpath, "rb"), timestamp_format, chunk_size)
+        super().__init__(open(fpath, "rb"), timestamp_format, chunk_size, enable_compression)
 
     def dump(self) -> None:
         for log in self:
