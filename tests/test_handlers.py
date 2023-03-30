@@ -309,7 +309,7 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
         def timeout_fn() -> None:
             nonlocal timeout_ts
             nonlocal timeout_count
-            timeout_ts[timeout_count.value] = time.time()  # type: ignore
+            timeout_ts[timeout_count.value] = c_double(time.time())
             timeout_count.value += 1
 
         self.loglevel_timeout = CLPLogLevelTimeout(timeout_fn, hard_deltas, soft_deltas)
