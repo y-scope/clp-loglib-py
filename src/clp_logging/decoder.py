@@ -84,7 +84,7 @@ class CLPDecoder:
             return None, -2
         pos += encoding_len
 
-        type_byte: bytes = view[pos : pos + 1]
+        type_byte: bytes = view[pos : pos + SIZEOF_BYTE]
         pos += SIZEOF_BYTE
         json_size: int
         if type_byte == METADATA_LEN_UBYTE:
@@ -132,6 +132,9 @@ class CLPDecoder:
         if end >= src_len:
             return -1, type_byte, end
 
+        # SIZEOF_BYTE can only ever be 1 to match the size of an element in a
+        # bytes-like python object. Therefore, we can get the integer value of
+        # type_byte by indexing it.
         token_type: int = type_byte[0]
         token_id: int = token_type & ID_MASK
         if token_id == ID_VAR:
