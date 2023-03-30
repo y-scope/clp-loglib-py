@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, tzinfo
 from math import floor
 from pathlib import Path
 from queue import Empty, Queue
@@ -37,26 +37,29 @@ WARN_PREFIX: str = " [WARN][clp_logging]"
 def _init_timeinfo(fmt: Optional[str], tz: Optional[str]) -> Tuple[str, str]:
     """
     Set default timestamp format or timezone if not specified.
+    If no timezone is specified it will try to default to the system local
+    timezone. If that fails it will default to UTC.
     In the future sanitization of user input should also go here.
     Currently, timestamp format defaults to a format for the Java readers, due
     to compatibility issues between language time libraries.
     (`datatime.isoformat` is always used for the timestamp format in python
     readers.)
+
     :param fmt: Timestamp format written in preamble to be used when generating
     the logs with a reader.
     :param tz: Timezone in TZID format written in preamble to be used when
     generating the timestamp from Unix epoch time.
+    :return: Tuple of timestamp format string and timezone in TZID format.
     """
     if not fmt:
         fmt = "yyyy-MM-d H:m:s.A"
     if not tz:
-        tzf = dateutil.tz.gettz()
+        tzf: Optional[tzinfo] = dateutil.tz.gettz()
         if tzf:
-            if tzf._filename == "/etc/localtime":  # type: ignore
-                tzp = Path.resolve(Path(tzf._filename))  # type: ignore
+            tzp: Path = Path.resolve(Path(tzf._filename))  # type: ignore
             tz = "/".join([tzp.parent.name, tzp.name])
         else:
-            tz = "UCT"
+            tz = "UTC"
     return fmt, tz
 
 
