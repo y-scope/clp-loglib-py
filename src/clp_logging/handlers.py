@@ -36,14 +36,16 @@ WARN_PREFIX: str = " [WARN][clp_logging]"
 
 def _init_timeinfo(fmt: Optional[str], tz: Optional[str]) -> Tuple[str, str]:
     """
-    Set default timestamp format or timezone if not specified.
-    If no timezone is specified it will try to default to the system local
-    timezone. If that fails it will default to UTC.
-    In the future sanitization of user input should also go here.
-    Currently, timestamp format defaults to a format for the Java readers, due
+    Return the timestamp format and timezone (in TZID format) that should be
+    used. If not specified by the user, this function will choose default
+    values to use.
+    The timestamp format (`fmt`) defaults to a format for the Java readers, due
     to compatibility issues between language time libraries.
     (`datatime.isoformat` is always used for the timestamp format in python
     readers.)
+    The timzeone format (`tz`) first defaults to the system local timezone. If
+    that fails it will default to UTC.
+    In the future sanitization of user input should also go here.
 
     :param fmt: Timestamp format written in preamble to be used when generating
     the logs with a reader.
