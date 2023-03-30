@@ -150,7 +150,6 @@ class CLPDecoder:
                 if end >= src_len:
                     return -1, type_byte, end
                 return token_type, src[pos:end], end
-
         elif token_id == ID_LOGTYPE:
             logtype_size: int = int.from_bytes(src[pos:end], BYTE_ORDER, signed=signed)
             pos = end
@@ -158,9 +157,7 @@ class CLPDecoder:
             if end >= src_len:
                 return -1, type_byte, end
             return token_type, src[pos:end], end
-
         elif token_id == ID_TIMESTAMP:
             return token_type, src[pos:end], end
-
         else:
             return -2, type_byte, end
