@@ -283,10 +283,10 @@ class CLPBaseReader(metaclass=ABCMeta):
                 token_type, token, pos = CLPDecoder.decode_token(
                     self.view[offset : self.valid_buf_len]
                 )
-                if token_type == -1:
-                    break
-                elif token_type == ID_EOF:
+                if token_type == ID_EOF:
                     return 0
+                elif token_type == -1:
+                    break
                 elif token_type < -1:
                     raise RuntimeError(
                         f"Error decoding token: 0x{token.hex()}, type: {token_type}"
