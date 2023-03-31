@@ -407,12 +407,15 @@ class CLPFileReader(CLPStreamReader):
             stderr.write(log.formatted_msg)
 
 
-class CLPSegmentStreamingReader:
+class _CLPSegmentStreamingReader:
     """
-    Abstract reader class used to read stream segments for CLP IR/"logs"
-    produced by handlers/encoders.
+    Private reader class used to read stream segments for CLP IR/"logs"
+    produced by handlers/encoders. The members in this class are used to
+    maintain a single operation for segment reading/streaming. The instance
+    of this class should not be reused, meaning that for each segment streaming,
+    there should be an individual instance of this class associated.
     :param istream: input stream to read from. It should be an abstracted
-    uncompressed seekable IR stream
+    uncompressed seekable IR stream, and it should have the method `readinto`
     :param ostream: output stream to write into. It should be an abstracted
     uncompressed IR stream
     :param _buf: Underlying `bytearray` used to read the CLP IR
@@ -493,12 +496,12 @@ class CLPSegmentStreamingReader:
                 else:
                     raise
         if self.metadata:
+            self.last_timestamp_ms = int(self.metadata[METADATA_REFERENCE_TIMESTAMP_KEY])
             preamble: bytearray = CLPEncoder.emit_preamble(
-                self.metadata[METADATA_REFERENCE_TIMESTAMP_KEY],
+                self.last_timestamp_ms,
                 self.metadata[METADATA_TIMESTAMP_PATTERN_KEY],
                 self.metadata[METADATA_TZ_ID_KEY],
             )
-            self.last_timestamp_ms = int(self.metadata[METADATA_REFERENCE_TIMESTAMP_KEY])
             return preamble
         return None
 
@@ -509,7 +512,7 @@ class CLPSegmentStreamingReader:
         later segment streaming.
         :return: CLP IR metadata header.
         """
-        self.metadata[METADATA_REFERENCE_TIMESTAMP_KEY] = self.last_timestamp_ms
+        self.metadata[METADATA_REFERENCE_TIMESTAMP_KEY] = str(self.last_timestamp_ms)
         return self.metadata
 
     def ostream_out_of_write_space(self, len_to_write: int) -> bool:
@@ -519,7 +522,7 @@ class CLPSegmentStreamingReader:
         :return: True if the ostream has no space to write.
         """
         return (
-            self.max_bytes_to_write
+            self.max_bytes_to_write != None
             and (self.total_bytes_written + len_to_write + 1) > self.max_bytes_to_write
         )
 
@@ -633,8 +636,12 @@ class CLPSegmentStreamingReader:
 
 class CLPSegmentStreaming:
     """
-    Wrapper for IR segment streaming. Provide encapsulation to the actual
-    stream reader class.
+    Wrapper for __CLPSegmentStreamingReader.
+    As explained in __CLPSegmentStreamingReader, its members are designed to
+    maintain a single read operation and thus not reuseable.
+    This class encapsulate the actual stream reader class and provide a static
+    method to ensure that each individual read operation will have its own
+    instance of __CLPSegmentStreamingReader.
     """
 
     @staticmethod
@@ -645,7 +652,7 @@ class CLPSegmentStreaming:
         max_bytes_to_write: Optional[int] = None,
         metadata: Optional[Metadata] = None,
     ) -> Tuple[int, Optional[Metadata]]:
-        reader: CLPSegmentStreamingReader = CLPSegmentStreamingReader(
+        reader: _CLPSegmentStreamingReader = _CLPSegmentStreamingReader(
             istream=istream,
             ostream=ostream,
             offset=offset,
