@@ -1,10 +1,11 @@
 # CLP Python Logging Library
+
 This is a Python `logging` library meant to supplement [CLP (Compressed Log Processor)][0].
 Logs are compressed in a streaming fashion into CLP's Internal Representation (IR) format before written to disk.
-More details are described in this [Uber's blog][1].  
+More details are described in this [Uber's blog][1].
 
-Logs compressed in IR format can be viewed in a [log viewer][2] or programmatically analyzed using 
-APIs provided here. They can also be decompressed back into plain-text log files using [CLP][0] (in a future release).    
+Logs compressed in IR format can be viewed in a [log viewer][2] or programmatically analyzed using
+APIs provided here. They can also be decompressed back into plain-text log files using [CLP][0] (in a future release).
 
 To achieve the best compression ratio, CLP should be used to compress large
 batches of logs, one batch at a time. However, individual log
@@ -19,22 +20,25 @@ CLP IR.
 These log files containing the compressed CLP IR streams can then all be
 ingested into CLP together at a later time.
 
-[0]: https://github.com/y-scope/clp
-[1]: https://www.uber.com/blog/reducing-logging-cost-by-two-orders-of-magnitude-using-clp/
-[2]: https://github.com/y-scope/yscope-log-viewer
-
 ## Quick Start
+
 The package is hosted with pypi (https://pypi.org/project/clp-logging/), so it
 can be installed with `pip`:
 
 `python3 -m pip install --upgrade clp-logging`
 
 ## Logger handlers
+
 ### CLPStreamHandler
+
 - Writes encoded logs directly to a stream
+
 ### CLPFileHandler
+
 - Simple wrapper around CLPStreamHandler that calls open
+
 #### Example: CLPFileHandler
+
 ```python
 import logging
 from pathlib import Path
@@ -49,7 +53,7 @@ logger.warn("example warning")
 ### CLPSockHandler + CLPSockListener
 
 This library also supports multiple processes writing to the same log file.
-In this case, all logging processes write to a listener server process through a TCP socket.  
+In this case, all logging processes write to a listener server process through a TCP socket.
 The socket name is the log file path passed to CLPSockHandler with a ".sock" suffix.
 
 A CLPSockListener can be explicitly created (and will run as a daemon) by calling:
@@ -57,13 +61,16 @@ A CLPSockListener can be explicitly created (and will run as a daemon) by callin
 Alternatively CLPSockHandlers can transparently start an associated CLPSockListener
 by calling `CLPSockHandler` with `create_listener=True`.
 
-CLPSockListener must be explicitly stopped once logging is completed. 
+CLPSockListener must be explicitly stopped once logging is completed.
 There are two ways to stop the listener process:
- - Calling `stop_listener()` from an existing handler, e.g., `clp_handler.stop_listener()`, or from a new handler with the same log path, e.g., `CLPSockHandler(Path("example.clp.zst")).stop_listener()`
- - Kill the CLPSockListener process with SIGTERM
+
+- Calling `stop_listener()` from an existing handler, e.g., `clp_handler.stop_listener()`, or from a new handler with the same log path, e.g., `CLPSockHandler(Path("example.clp.zst")).stop_listener()`
+- Kill the CLPSockListener process with SIGTERM
 
 #### Example: CLPSockHandler + CLPSockListener
+
 In the handler processes or threads:
+
 ```python
 import logging
 from pathlib import Path
@@ -74,7 +81,9 @@ logger = logging.getLogger(__name__)
 logger.addHandler(clp_handler)
 logger.warn("example warning")
 ```
+
 In a single process or thread once logging is completed:
+
 ```python
 from pathlib import Path
 from clp_logging.handlers import CLPSockHandler
@@ -83,17 +92,21 @@ CLPSockHandler(Path("example.clp.zst")).stop_listener()
 ```
 
 ## CLP readers (decoders)
+
 ### CLPStreamReader
+
 - Read/decode any arbitrary stream
 - Can be used as an iterator that returns each log message as an object
 - Can skip n logs: `clp_reader.skip_nlogs(N)`
 - Can skip to first log after given time (since unix epoch):
-    - `clp_reader.skip_to_time(TIME)`
+  - `clp_reader.skip_to_time(TIME)`
 
 ### CLPFileReader
+
 - Simple wrapper around CLPStreamHandler that calls open
 
 #### Example code: CLPFileReader
+
 ```python
 from pathlib import Path
 from typing import List
@@ -106,6 +119,39 @@ with CLPFileReader(Path("example.clp.zst")) as clp_reader:
     for log in clp_reader:
         log_objects.append(log)
 ```
+
+### CLPSegmentStreaming
+
+* Segment streaming reader allows the read operation to start from a non-zero offset, and streams the legal encoded logs from one stream to another.
+* Each read call will return an encoded metadata which can be used to resume from the current call.
+
+#### Example code: CLPSegmentStreaming
+
+```python
+from clp_logging.readers import CLPSegmentStreaming
+from clp_logging.protocol import Metadata
+
+segment_idx: int = 0
+segment_max_size: int = 8192
+offset: int = 0
+metadata: Metadata = None
+while True:
+	bytes_read: int
+	with open("example.clp", "rb") as fin, open(f"{segment_idx}.clp", "wb") as fout:
+		bytes_read, metadata = CLPSegmentStreaming.read(
+			fin,
+			fout,
+			offset=offset,
+			max_bytes_to_write=segment_max_size,
+			metadata=metadata
+		)
+		segment_idx += 1
+		offset += bytes_read
+	if metadata == None:
+		break
+```
+
+In the example code provided, "example.clp" is streamed into segments named "0.clp", "1.clp", and so on. Each segment is smaller than 8192 bytes and can be decoded independently.
 
 ## Log level timeout feature: CLPLogLevelTimeout
 
@@ -121,6 +167,7 @@ An additional timeout is always triggered on closing the logging handler.
 See the class documentation for specific details.
 
 #### Example code: CLPLogLevelTimeout
+
 ```python
 import logging
 from pathlib import Path
@@ -148,29 +195,38 @@ logging.getLogger(__name__).addHandler(clp_handler)
 ```
 
 ## Compatibility
+
 Tested on Python 3.6 and 3.8 and should work on any newer version.
 Built/packaged on Python 3.8 for convenience regarding type annotation.
 
 ## Building/Packaging
+
 1. Create and enter a virtual environment:
-    `python3.8 -m venv venv; . ./venv/bin/activate`
+   `python3.8 -m venv venv; . ./venv/bin/activate`
 2. Install development dependencies:
-    `pip install -r requirements-dev.txt`
+   `pip install -r requirements-dev.txt`
 3. Build:
-    `python -m build`
+   `python -m build`
 
 ## Testing
+
 Note the baseline comparison logging handler and the CLP handler both get
 unique timestamps. It is possible for these timestamps to differ, which will
 result in a test reporting a false positive error.
+
 1. Create and enter a virtual environment:
-    `python -m venv venv; .  ./venv/bin/activate`
+   `python -m venv venv; .  ./venv/bin/activate`
 2. Install:
-    `pip install dist/clp_logging-*-py3-none-any.whl` or `pip install -e .`
+   `pip install dist/clp_logging-*-py3-none-any.whl` or `pip install -e .`
 3. Run unittest:
-    `python -m unittest -bv`
+   `python -m unittest -bv`
 
 ## Contributing
+
 Ensure to run `mypy` and `black` (found in
 [requirements-dev.txt](requirements-dev.txt)) during development to ensure
 smooth pull requests.
+
+[0]: https://github.com/y-scope/clp
+[1]: https://www.uber.com/blog/reducing-logging-cost-by-two-orders-of-magnitude-using-clp/
+[2]: https://github.com/y-scope/yscope-log-viewer
