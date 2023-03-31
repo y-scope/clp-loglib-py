@@ -433,6 +433,7 @@ class _CLPSegmentStreamingReader:
     the streaming will end. It ensures to stream till the last valid log message
     :param _first_stream: to indicate if the stream has executed already.
     Each instance of this class should only stream once
+    :param eof_reached: to indicate if the EOF_TOKEN is read from the decoder
     """
 
     def __init__(
@@ -466,6 +467,7 @@ class _CLPSegmentStreamingReader:
         self.total_bytes_written: int = 0
         self.max_bytes_to_write: Optional[int] = max_bytes_to_write
         self._first_stream: bool = True
+        self.eof_reached: bool = False
 
     def readinto_buf(self, offset: int) -> int:
         """
@@ -505,13 +507,17 @@ class _CLPSegmentStreamingReader:
             return preamble
         return None
 
-    def generate_return_metadata(self) -> Metadata:
+    def generate_return_metadata(self) -> Optional[Metadata]:
         """
         Use the latest processed real timestamp to construct a legal CLP IR
         metadata, which can be used to resume read from current position in
         later segment streaming.
+        However, if the EOF is reached, None should be returned since the
+        terminated read should not be resumed.
         :return: CLP IR metadata header.
         """
+        if self.eof_reached:
+            return None
         self.metadata[METADATA_REFERENCE_TIMESTAMP_KEY] = str(self.last_timestamp_ms)
         return self.metadata
 
@@ -578,17 +584,15 @@ class _CLPSegmentStreamingReader:
                 token_type, token, pos = CLPDecoder.decode_token(
                     self.view[offset : self.valid_buf_len]
                 )
-                if token_type < 0:
-                    if token_type < -2:
-                        raise RuntimeError(
-                            f"Error decoding token: 0x{token.hex()}, type: {token_type}"
-                        )
-                    else:
-                        break  # Attempt to read more
-
-                # We have reached the end of stream.
-                if ID_EOF == token_type:
-                    break
+                if token_type == ID_EOF:
+                    self.eof_reached = True
+                    break  # Reach the end of stream
+                elif token_type == -1:
+                    break  # Pupolate the buffer and decode again
+                elif token_type < -1:
+                    raise RuntimeError(
+                        f"Error decoding token: 0x{token.hex()}, type: {token_type}"
+                    )
 
                 log_buf += self.view[offset : offset + pos]
                 offset += pos
@@ -608,6 +612,14 @@ class _CLPSegmentStreamingReader:
                         raise RuntimeError("Failed to write into out stream.")
                     self.total_bytes_written += bytes_written
                     log_buf.clear()
+
+            if self.eof_reached:
+                # For a legal IR stream, if EOF is reached, there should be no
+                # extra data appended. In this case, bytes consumed will be
+                # the number of bytes read in total. Return None for the
+                # metadata because the terminated read should not be resumed.
+                self.ostream.write(EOF_CHAR)
+                return self.total_bytes_read, self.generate_return_metadata()
 
             # Shift valid bytes to the start to make room for reading
             # Grow the buffer if more than half is still valid
