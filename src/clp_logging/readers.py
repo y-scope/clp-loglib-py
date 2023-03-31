@@ -604,6 +604,7 @@ class _CLPSegmentStreamingReader:
                         bytes_consumed: int = (
                             self.total_bytes_read - log_length - (self.valid_buf_len - offset)
                         )
+                        self.ostream.write(EOF_CHAR)
                         return bytes_consumed, self.generate_return_metadata()
                     # Increment the last recorded timestamp
                     self.last_timestamp_ms += int.from_bytes(token, BYTE_ORDER, signed=True)
