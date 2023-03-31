@@ -588,7 +588,7 @@ class _CLPSegmentStreamingReader:
                     self.eof_reached = True
                     break  # Reach the end of stream
                 elif token_type == -1:
-                    break  # Pupolate the buffer and decode again
+                    break  # Populate the buffer and decode again
                 elif token_type < -1:
                     raise RuntimeError(
                         f"Error decoding token: 0x{token.hex()}, type: {token_type}"
@@ -648,12 +648,12 @@ class _CLPSegmentStreamingReader:
 
 class CLPSegmentStreaming:
     """
-    Wrapper for __CLPSegmentStreamingReader.
-    As explained in __CLPSegmentStreamingReader, its members are designed to
+    Wrapper for _CLPSegmentStreamingReader.
+    As explained in _CLPSegmentStreamingReader, its members are designed to
     maintain a single read operation and thus not reuseable.
     This class encapsulate the actual stream reader class and provide a static
     method to ensure that each individual read operation will have its own
-    instance of __CLPSegmentStreamingReader.
+    instance of _CLPSegmentStreamingReader.
     """
 
     @staticmethod
