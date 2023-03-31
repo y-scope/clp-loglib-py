@@ -26,6 +26,7 @@ from clp_logging.protocol import Metadata
 from clp_logging.readers import CLPFileReader
 from clp_logging.readers import CLPSegmentStreaming
 
+
 def _zstd_comppressions_handler(file_obj, mode):
     if "wb" == mode:
         cctx = ZstdCompressor()
@@ -35,7 +36,8 @@ def _zstd_comppressions_handler(file_obj, mode):
         return dctx.stream_reader(file_obj)
     else:
         raise RuntimeError(f"Zstd handler: Unexpected Mode {mode}")
-    
+
+
 # Register .zst with zstandard library compressor
 register_compressor(".zst", _zstd_comppressions_handler)
 
@@ -546,16 +548,16 @@ class TestCLPStream_LLT_RAW(TestCLPLogLevelTimeoutBase):
             self.clp_log_path, loglevel_timeout=self.loglevel_timeout, enable_compression=False
         )
         self.setup_logging()
-        
+
 
 class TestCLPSegmentStreamingBase(unittest.TestCase):
     """
-    Similar to `TestCLPBase`. Functionally abstract as we use `load_tests` to 
-    avoid adding `TestCLPSegmentStreamingBase` itself to the test suite. This 
-    allows us to share tests between different settings when test against 
+    Similar to `TestCLPBase`. Functionally abstract as we use `load_tests` to
+    avoid adding `TestCLPSegmentStreamingBase` itself to the test suite. This
+    allows us to share tests between different settings when test against
     IR segment streaming.
     """
-    
+
     clp_handler: CLPBaseHandler
     clp_log_path: Path
     segment_path_list: List[Path]
@@ -564,14 +566,14 @@ class TestCLPSegmentStreamingBase(unittest.TestCase):
     # Configurable:
     enable_compression: bool
     segment_size: int
-    
+
     # override
     @classmethod
     def setUpClass(cls) -> None:
         if not LOG_DIR.exists():
             LOG_DIR.mkdir(parents=True, exist_ok=True)
         assert LOG_DIR.is_dir()
-        
+
     # override
     def setUp(self) -> None:
         if self.enable_compression:
@@ -582,7 +584,7 @@ class TestCLPSegmentStreamingBase(unittest.TestCase):
             self.clp_log_path.unlink()
         self.segment_path_list: List[Path] = []
         self.segment_idx = 0
-        
+
     def generate_segments(self) -> None:
         meta: Metadata = None
         offset: int = 0
@@ -597,45 +599,41 @@ class TestCLPSegmentStreamingBase(unittest.TestCase):
             bytes_read: int
             with open(self.clp_log_path, "rb") as fin, open(segment_path, "wb") as fout:
                 bytes_read, meta = CLPSegmentStreaming.read(
-                    fin, 
-                    fout, 
-                    offset=offset, 
-                    max_bytes_to_write=self.segment_size,
-                    metadata=meta
+                    fin, fout, offset=offset, max_bytes_to_write=self.segment_size, metadata=meta
                 )
                 offset += bytes_read
                 self.segment_idx += 1
             self.segment_path_list.append(segment_path)
             if meta == None or bytes_read == 0:
                 break
-            
+
     def close(self) -> None:
         logging.shutdown()
         self.logger.removeHandler(self.clp_handler)
-    
+
     def read_clp(self) -> List[str]:
         with CLPFileReader(self.clp_log_path, enable_compression=self.enable_compression) as logf:
             return [log.formatted_msg for log in logf]
-        
+
     def read_segments(self) -> List[str]:
         logs: List[str] = []
         for segment_path in self.segment_path_list:
             with CLPFileReader(segment_path, enable_compression=self.enable_compression) as logf:
                 logs.extend([log.formatted_msg for log in logf])
         return logs
-    
+
     def compare_all_logs(self) -> None:
         self.close()
         self.generate_segments()
         clp_logs: List[str] = self.read_clp()
         segment_logs: List[str] = self.read_segments()
         self.compare_logs(clp_logs, segment_logs)
-    
+
     def compare_logs(self, clp_logs: List[str], segment_logs: List[str]):
         self.assertEqual(len(clp_logs), len(segment_logs))
         for clp_log, segment_log in zip(clp_logs, segment_logs):
             self.assertEqual(clp_log, segment_log)
-            
+
     def setup_logging(self) -> None:
         self.clp_handler: CLPStreamHandler = CLPFileHandler(
             self.clp_log_path, enable_compression=self.enable_compression
@@ -671,6 +669,7 @@ class TestCLPSegmentStreamingBase(unittest.TestCase):
             self.logger.debug("zxcvbn foo=bar asdfgh foobar=var321 qwerty")
         self.compare_all_logs()
 
+
 class TestCLPSegmentStreaming_ZSTD(TestCLPSegmentStreamingBase):
     # override
     def setUp(self) -> None:
@@ -678,7 +677,8 @@ class TestCLPSegmentStreaming_ZSTD(TestCLPSegmentStreamingBase):
         self.segment_size = 4096
         super().setUp()
         self.setup_logging()
-        
+
+
 class TestCLPSegmentStreaming_RAW(TestCLPSegmentStreamingBase):
     # override
     def setUp(self) -> None:
@@ -686,6 +686,7 @@ class TestCLPSegmentStreaming_RAW(TestCLPSegmentStreamingBase):
         self.segment_size = 4096
         super().setUp()
         self.setup_logging()
+
 
 if __name__ == "__main__":
     unittest.main()
