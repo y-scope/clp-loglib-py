@@ -2,13 +2,14 @@ from abc import ABCMeta, abstractmethod
 from datetime import datetime, tzinfo
 from pathlib import Path
 from types import TracebackType
-from typing import IO, Iterator, List, Match, Optional, Type, Union
+from typing import IO, Iterator, List, Match, Optional, Tuple, Type, Union
 
 import dateutil.tz
 from sys import stderr
 from zstandard import ZstdDecompressor, ZstdDecompressionReader
 
 from clp_logging.decoder import CLPDecoder
+from clp_logging.encoder import CLPEncoder
 from clp_logging.protocol import (
     BYTE_ORDER,
     DELIM_DICT,
@@ -404,3 +405,271 @@ class CLPFileReader(CLPStreamReader):
     def dump(self) -> None:
         for log in self:
             stderr.write(log.formatted_msg)
+
+
+class _CLPSegmentStreamingReader:
+    """
+    Private reader class used to read stream segments for CLP IR/"logs"
+    produced by handlers/encoders. The members in this class are used to
+    maintain a single operation for segment reading/streaming. The instance
+    of this class should not be reused, meaning that for each segment streaming,
+    there should be an individual instance of this class associated.
+    :param istream: input stream to read from. It should be an abstracted
+    uncompressed seekable IR stream, and it should have the method `readinto`
+    :param ostream: output stream to write into. It should be an abstracted
+    uncompressed IR stream
+    :param _buf: Underlying `bytearray` used to read the CLP IR
+    :param view: `memoryview` of `bytearray` to allow convenient slicing
+    :param offset: position to start reading from, it's 0 by default
+    :param metadata: metadata from CLP IR header to construct a legal stream,
+    must be provided to resume read from a none-zero offset
+    :param last_timestamp_ms: the timestamp of the last successfully streamed
+    log message
+    :param init_pos: the position to start read the first log event from `_buf`
+    :param pos: Current position in the `view`
+    :param total_bytes_read: total number of bytes read from istream
+    :param total_bytes_write: total number of bytes write into ostream
+    :param max_bytes_to_write: maximum bytes to write into ostream. If exceed,
+    the streaming will end. It ensures to stream till the last valid log message
+    :param _first_stream: to indicate if the stream has executed already.
+    Each instance of this class should only stream once
+    :param eof_reached: to indicate if the EOF_TOKEN is read from the decoder
+    """
+
+    def __init__(
+        self,
+        istream: IO[bytes],
+        ostream: IO[bytes],
+        offset: Optional[int] = None,
+        max_bytes_to_write: Optional[int] = None,
+        metadata: Optional[Metadata] = None,
+        chunk_size: int = 4096,
+    ) -> None:
+        """
+        Constructor
+        :param istream: seekable uncompressed input stream
+        :param ostream: uncompressed output stream
+        :param offset: position to start reading from
+        :param max_bytes_to_write: maximum bytes to write into ostream
+        :param metadata: metadata from CLP IR header to construct a legal stream
+        :param chunk_size: initial size of `_buf` for reading
+        """
+        self.istream: IO[bytes] = istream
+        self.ostream: IO[bytes] = ostream
+        self._buf: bytearray = bytearray(chunk_size)
+        self.view: memoryview = memoryview(self._buf)
+        self.valid_buf_len: int = 0
+        self.offset: Optional[int] = offset
+        self.metadata: Optional[Metadata] = metadata
+        self.last_timestamp_ms: int
+        self.init_pos: int = 0
+        self.total_bytes_read: int = 0
+        self.total_bytes_written: int = 0
+        self.max_bytes_to_write: Optional[int] = max_bytes_to_write
+        self._first_stream: bool = True
+        self.eof_reached: bool = False
+
+    def readinto_buf(self, offset: int) -> int:
+        """
+        Populate the underlying `_buf`.
+        :return: Bytes read (0 for EOF), < 0 on error
+        """
+        bytes_read: int = self.istream.readinto(self.view[offset:])
+        self.total_bytes_read += bytes_read
+        return bytes_read
+
+    def init_preamble(self) -> Optional[bytearray]:
+        """
+        Initialize the CLP IR header for the coming read, and initialize
+        `last_timestamp_ms`. If metadata is not provided, it will attempt to
+        parse the header from `_buf` and set `init_pos`.
+        :return: CLP IR header represented as a byte array.
+        """
+        if not self.metadata:
+            try:
+                self.metadata, self.init_pos = CLPDecoder.decode_preamble(self.view, 0)
+            except Exception as e:
+                if len(self._buf) == self.valid_buf_len:
+                    raise RuntimeError(
+                        "CLPDecoder.decode_preamble failed; CLPReader chunk_size likely too small."
+                        f" [self._buf/chunk_size({len(self._buf)}) == self.valid_buf_len"
+                        f"({self.valid_buf_len})]"
+                    ) from e
+                else:
+                    raise
+        if self.metadata:
+            self.last_timestamp_ms = int(self.metadata[METADATA_REFERENCE_TIMESTAMP_KEY])
+            preamble: bytearray = CLPEncoder.emit_preamble(
+                self.last_timestamp_ms,
+                self.metadata[METADATA_TIMESTAMP_PATTERN_KEY],
+                self.metadata[METADATA_TZ_ID_KEY],
+            )
+            return preamble
+        return None
+
+    def generate_return_metadata(self) -> Optional[Metadata]:
+        """
+        Use the latest processed real timestamp to construct a legal CLP IR
+        metadata, which can be used to resume read from current position in
+        later segment streaming.
+        However, if the EOF is reached, None should be returned since the
+        terminated read should not be resumed.
+        :return: CLP IR metadata header.
+        """
+        if self.eof_reached:
+            return None
+        self.metadata[METADATA_REFERENCE_TIMESTAMP_KEY] = str(self.last_timestamp_ms)
+        return self.metadata
+
+    def ostream_out_of_write_space(self, len_to_write: int) -> bool:
+        """
+        Check if the output stream has enough space reserved to write
+        `len_to_write` of bytes.
+        :return: True if the ostream has no space to write.
+        """
+        return (
+            self.max_bytes_to_write != None
+            and (self.total_bytes_written + len_to_write + 1) > self.max_bytes_to_write
+        )
+
+    def stream_ir_segment(self) -> Tuple[int, Optional[Metadata]]:
+        """
+        Streaming from istream to ostream, starting from `offset`. It stops
+        either the istream is consumed, or the number of bytes written into the
+        ostream exceeds `max_bytes_to_write`. This method will gaurantee to read
+        till the last valid log message from the IR.
+        :return: How many bytes are consumed from the istream and successfully
+        streaming into ostream, along with the metadata to resume streaming from
+        the last valid log message.
+        """
+        if not self._first_stream:
+            raise RuntimeError("This object has already streamed.")
+        self._first_stream = False
+
+        if self.offset and 0 != self.offset:
+            # Seek the input stream to the given position.
+            # By default, it should seek from the beginning.
+            if not self.metadata:
+                raise RuntimeError(
+                    "To seek the IR into a none-zero position, a metadata from last read must be"
+                    " given."
+                )
+            self.istream.seek(self.offset)
+
+        bytes_read: int = self.readinto_buf(0)
+        if bytes_read == 0:
+            return 0, None
+        elif bytes_read < 0:
+            raise RuntimeError("Failed to read from input stream.")
+        self.valid_buf_len = bytes_read
+
+        preamble = self.init_preamble()
+        if not preamble:
+            raise RuntimeError("Failed to read initial IR metadata.")
+
+        if self.ostream_out_of_write_space(len(preamble)):
+            raise RuntimeError("Output stream limit too small to fit IR metadata.")
+
+        bytes_written = self.ostream.write(preamble)
+        if bytes_written <= 0:
+            raise RuntimeError("Failed to write into output stream.")
+        self.total_bytes_written += bytes_written
+
+        offset: int = self.init_pos
+        log_buf: bytearray = bytearray(0)
+        while True:
+            token: bytes
+            while True:
+                token_type: int
+                token_type, token, pos = CLPDecoder.decode_token(
+                    self.view[offset : self.valid_buf_len]
+                )
+                if token_type == ID_EOF:
+                    self.eof_reached = True
+                    break  # Reach the end of stream
+                elif token_type == -1:
+                    break  # Populate the buffer and decode again
+                elif token_type < -1:
+                    raise RuntimeError(
+                        f"Error decoding token: 0x{token.hex()}, type: {token_type}"
+                    )
+
+                log_buf += self.view[offset : offset + pos]
+                offset += pos
+
+                token_id: int = token_type & ID_MASK
+                if ID_TIMESTAMP == token_id:
+                    log_length: int = len(log_buf)
+                    if self.ostream_out_of_write_space(log_length):
+                        bytes_consumed: int = (
+                            self.total_bytes_read - log_length - (self.valid_buf_len - offset)
+                        )
+                        self.ostream.write(EOF_CHAR)
+                        return bytes_consumed, self.generate_return_metadata()
+                    # Increment the last recorded timestamp
+                    self.last_timestamp_ms += int.from_bytes(token, BYTE_ORDER, signed=True)
+                    bytes_written = self.ostream.write(log_buf)
+                    if bytes_written <= 0:
+                        raise RuntimeError("Failed to write into out stream.")
+                    self.total_bytes_written += bytes_written
+                    log_buf.clear()
+
+            if self.eof_reached:
+                # For a legal IR stream, if EOF is reached, there should be no
+                # extra data appended. In this case, bytes consumed will be
+                # the number of bytes read in total. Return None for the
+                # metadata because the terminated read should not be resumed.
+                self.ostream.write(EOF_CHAR)
+                return self.total_bytes_read, self.generate_return_metadata()
+
+            # Shift valid bytes to the start to make room for reading
+            # Grow the buffer if more than half is still valid
+            valid: int = self.valid_buf_len - offset
+            self.view[:valid] = self.view[offset : self.valid_buf_len]
+            if valid > len(self._buf) // 2:
+                tmp = bytearray(len(self._buf) * 2)
+                tmp[:valid] = self.view
+                self.view.release()
+                self._buf = tmp
+                self.view = memoryview(self._buf)
+
+            bytes_read: int = self.readinto_buf(valid)
+            if bytes_read == 0:
+                # No more to read. This is the end of the current segment.
+                self.ostream.write(EOF_CHAR)
+                # Log in the current buffer is not written into ostream.
+                bytes_consumed: int = self.total_bytes_read - len(log_buf) - valid
+                return bytes_consumed, self.generate_return_metadata()
+            elif bytes_read < 0:
+                raise RuntimeError("Failed to read from input stream.")
+
+            offset = 0
+            self.valid_buf_len = valid + bytes_read
+
+
+class CLPSegmentStreaming:
+    """
+    Wrapper for _CLPSegmentStreamingReader.
+    As explained in _CLPSegmentStreamingReader, its members are designed to
+    maintain a single read operation and thus not reuseable.
+    This class encapsulate the actual stream reader class and provide a static
+    method to ensure that each individual read operation will have its own
+    instance of _CLPSegmentStreamingReader.
+    """
+
+    @staticmethod
+    def read(
+        istream: IO[bytes],
+        ostream: IO[bytes],
+        offset: Optional[int] = None,
+        max_bytes_to_write: Optional[int] = None,
+        metadata: Optional[Metadata] = None,
+    ) -> Tuple[int, Optional[Metadata]]:
+        reader: _CLPSegmentStreamingReader = _CLPSegmentStreamingReader(
+            istream=istream,
+            ostream=ostream,
+            offset=offset,
+            max_bytes_to_write=max_bytes_to_write,
+            metadata=metadata,
+        )
+        return reader.stream_ir_segment()
