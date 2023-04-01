@@ -218,9 +218,11 @@ result in a test reporting a false positive error.
 
 1. Create and enter a virtual environment:
    `python -m venv venv; .  ./venv/bin/activate`
-2. Install:
+2. Install development dependencies:
+   `pip install -r requirements-dev.txt`
+3. Install:
    `pip install dist/clp_logging-*-py3-none-any.whl` or `pip install -e .`
-3. Run unittest:
+4. Run unittest:
    `python -m unittest -bv`
 
 ## Contributing
