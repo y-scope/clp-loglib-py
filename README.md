@@ -227,10 +227,27 @@ result in a test reporting a false positive error.
 
 ## Contributing
 
-Ensure to run `mypy` and `black` (found in
-[requirements-dev.txt](requirements-dev.txt)) during development to ensure
-smooth pull requests.
+Before submitting a pull request, run the following error-checking and formatting tools (found in
+[requirements-dev.txt](requirements-dev.txt)):
+
+* [mypy][3]: `mypy src`
+  * mypy checks for typing errors. You should resolve all typing errors or if an error cannot be 
+    resolved (e.g., it's due to a third-party library), you should add a comment 
+    `# type: ignore` to [silence][4] the error.
+* [docformatter][5]: `docformatter -i src`
+  * This formats docstrings. You should review and add any changes to your PR.
+* [Black][6]: `black src`
+  * This formats the code according to Black's code-style rules. You should review and add any
+    changes to your PR.
+
+Note that `docformatter` should be run before `black` to give Black the [last 
+word][7].
 
 [0]: https://github.com/y-scope/clp
 [1]: https://www.uber.com/blog/reducing-logging-cost-by-two-orders-of-magnitude-using-clp/
 [2]: https://github.com/y-scope/yscope-log-viewer
+[3]: https://mypy.readthedocs.io/en/stable/index.html
+[4]: https://mypy.readthedocs.io/en/stable/common_issues.html#spurious-errors-and-locally-silencing-the-checker
+[5]: https://docformatter.readthedocs.io/en/latest/
+[6]: https://black.readthedocs.io/en/stable/index.html
+[7]: https://docformatter.readthedocs.io/en/latest/faq.html#interaction-with-black
