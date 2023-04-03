@@ -122,10 +122,10 @@ with CLPFileReader(Path("example.clp.zst")) as clp_reader:
 
 ### CLPSegmentStreaming
 
-* Classes inheriting CLPBaseReader are only capable of reading a single CLP IR stream from start to finish. This is required as to know the timestamp of an individual log, the starting timestamp (from the IR stream preamble) and all timestamp deltas up to that log must be known. In scenarios where a IR stream is periodically uploaded in chunks, users would need to either continuously read the entire stream or re-read the entire stream from the start.
+* Classes that inherit from CLPBaseReader can only read a single CLP IR stream from start to finish. This is necessary because, to determine the timestamp of an individual log, the starting timestamp (from the IR stream preamble) and all timestamp deltas up to that log must be known. In scenarios where an IR stream is periodically uploaded in chunks, users would need to either continuously read the entire stream or re-read the entire stream from the start.
 * The CLPSegmentStreaming class has the ability to take an input IR stream and segment it, outputting multiple independent IR streams. This makes it possible to read arbitrary segments of the original input IR stream without needing to decode it from the start.
-* In technical terms, the segment streaming reader allows the read operation to start from a non-zero offset, and streams the legal encoded logs from one stream to another.
-* Each read call will return an encoded metadata which can be used to resume from the current call.S
+* In technical terms, the segment streaming reader allows the read operation to start from a non-zero offset and streams the legally encoded logs from one stream to another.
+* Each read call will return encoded metadata that can be used to resume from the current call.
 
 #### Example code: CLPSegmentStreaming
 
