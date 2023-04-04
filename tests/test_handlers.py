@@ -8,8 +8,13 @@ from math import floor
 from multiprocessing.sharedctypes import Array, Value, Synchronized, SynchronizedArray
 from smart_open import open, register_compressor
 from pathlib import Path
-from typing import cast, ClassVar, Dict, IO, List, Optional
-from zstandard import ZstdCompressor, ZstdDecompressor
+from typing import cast, ClassVar, Dict, IO, List, Optional, Union
+from zstandard import (
+    ZstdCompressor,
+    ZstdDecompressor,
+    ZstdCompressionWriter,
+    ZstdDecompressionReader,
+)
 
 import dateutil.parser
 
@@ -27,7 +32,9 @@ from clp_logging.readers import CLPFileReader
 from clp_logging.readers import CLPSegmentStreaming
 
 
-def _zstd_comppressions_handler(file_obj, mode):
+def _zstd_comppressions_handler(
+    file_obj: IO[bytes], mode: str
+) -> Union[ZstdCompressionWriter, ZstdDecompressionReader]:
     if "wb" == mode:
         cctx = ZstdCompressor()
         return cctx.stream_writer(file_obj)
@@ -117,7 +124,8 @@ class TestCLPBase(unittest.TestCase):
 
     def read_raw(self) -> List[str]:
         with open(self.raw_log_path, "r") as logf:
-            return logf.readlines()
+            logs: List[str] = logf.readlines()
+            return logs
 
     def setup_logging(self) -> None:
         self.logger: logging.Logger = logging.getLogger(self.id())
@@ -586,14 +594,14 @@ class TestCLPSegmentStreamingBase(unittest.TestCase):
         self.segment_idx = 0
 
     def generate_segments(self) -> None:
-        meta: Metadata = None
+        meta: Optional[Metadata] = None
         offset: int = 0
         while True:
             segment_path: Path
             if self.enable_compression:
-                segment_path: Path = LOG_DIR / Path(f"{self.id()}_seg_{self.segment_idx}.clp.zst")
+                segment_path = LOG_DIR / Path(f"{self.id()}_seg_{self.segment_idx}.clp.zst")
             else:
-                segment_path: Path = LOG_DIR / Path(f"{self.id()}_seg_{self.segment_idx}.clp")
+                segment_path = LOG_DIR / Path(f"{self.id()}_seg_{self.segment_idx}.clp")
             if segment_path.exists():
                 segment_path.unlink()
             bytes_read: int
@@ -604,7 +612,7 @@ class TestCLPSegmentStreamingBase(unittest.TestCase):
                 offset += bytes_read
                 self.segment_idx += 1
             self.segment_path_list.append(segment_path)
-            if meta == None or bytes_read == 0:
+            if meta is None or bytes_read == 0:
                 break
 
     def close(self) -> None:
@@ -629,7 +637,7 @@ class TestCLPSegmentStreamingBase(unittest.TestCase):
         segment_logs: List[str] = self.read_segments()
         self.compare_logs(clp_logs, segment_logs)
 
-    def compare_logs(self, clp_logs: List[str], segment_logs: List[str]):
+    def compare_logs(self, clp_logs: List[str], segment_logs: List[str]) -> None:
         self.assertEqual(len(clp_logs), len(segment_logs))
         for clp_log, segment_log in zip(clp_logs, segment_logs):
             self.assertEqual(clp_log, segment_log)
