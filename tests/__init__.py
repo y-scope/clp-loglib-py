@@ -5,9 +5,11 @@ import unittest
 
 
 def add_tests(suite: unittest.TestSuite, loader: unittest.TestLoader, test_class: type) -> None:
-    """Recursively collect tests from concrete classes. Although TestCLPBase*
+    """
+    Recursively collect tests from concrete classes. Although TestCLPBase*
     classes are functionally abstract to the user we cannot properly make them
     abstract as `unittest` will still create instances of these classes.
+
     :param suite: test suite to add found tests to
     :param loader: load test from `unittest.TestCase` class
     :param test_class: current class to search for tests in

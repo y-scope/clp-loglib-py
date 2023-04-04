@@ -48,8 +48,8 @@ LOG_DIR: Path = Path("unittest-logs")
 class DtStreamHandler(logging.StreamHandler):  # type: ignore
     """
     `logging` handler using `datetime` for the timestamp rather than `time`
-    (used internally by `logging`). Necessary for correct comparison with CLP
-    log handlers.
+    (used internally by `logging`), so we can perform correct comparison with
+    CLP log handlers.
     """
 
     def __init__(self, stream: IO[str]) -> None:
@@ -80,12 +80,14 @@ class DtFileHandler(DtStreamHandler):
 
 class TestCLPBase(unittest.TestCase):
     """
-    Functionally abstract as we use `load_tests` to avoid adding
-    `TestCLPBase` itself to the test suite. This allows us to share tests
-    between different handlers.
-    However, we cannot mark it as abstract as `unittest` will still `__init__`
-    an instance before `load_tests` is run (and will error out if any method
-    is marked abstract).
+    Functionally abstract base class for testing handlers, etc.
+
+    Functionally abstract as we use `load_tests` to avoid adding `TestCLPBase`
+    itself to the test suite. This allows us to share tests between different
+    handlers. However, we cannot mark it as abstract as `unittest` will still
+    `__init__` an instance before `load_tests` is run (and will error out if any
+    method is marked abstract).
+
     Non-base classes have shortened names to avoid errors with socket name
     length.
     """
@@ -552,10 +554,12 @@ class TestCLPStream_LLT_RAW(TestCLPLogLevelTimeoutBase):
 
 class TestCLPSegmentStreamingBase(unittest.TestCase):
     """
+    Functionally abstract base class for testing segment streaming.
+
     Similar to `TestCLPBase`. Functionally abstract as we use `load_tests` to
     avoid adding `TestCLPSegmentStreamingBase` itself to the test suite. This
-    allows us to share tests between different settings when test against
-    IR segment streaming.
+    allows us to share tests between different settings when test against IR
+    segment streaming.
     """
 
     clp_handler: CLPBaseHandler

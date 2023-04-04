@@ -227,20 +227,20 @@ result in a test reporting a false positive error.
 
 ## Contributing
 
-Before submitting a pull request, run the following error-checking and formatting tools (found in
-[requirements-dev.txt](requirements-dev.txt)):
+Before submitting a pull request, run the following error-checking and
+formatting tools (found in [requirements-dev.txt](requirements-dev.txt)):
 
-* [mypy][3]: `mypy src`
-  * mypy checks for typing errors. You should resolve all typing errors or if an error cannot be 
-    resolved (e.g., it's due to a third-party library), you should add a comment 
-    `# type: ignore` to [silence][4] the error.
-* [docformatter][5]: `docformatter -i src`
+* [mypy][3]: `mypy src tests`
+  * mypy checks for typing errors. You should resolve all typing errors or if an
+    error cannot be resolved (e.g., it's due to a third-party library), you
+    should add a comment `# type: ignore` to [silence][4] the error.
+* [docformatter][5]: `docformatter -i src tests`
   * This formats docstrings. You should review and add any changes to your PR.
-* [Black][6]: `black src`
-  * This formats the code according to Black's code-style rules. You should review and add any
-    changes to your PR.
+* [Black][6]: `black src tests`
+  * This formats the code according to Black's code-style rules. You should
+    review and add any changes to your PR.
 
-Note that `docformatter` should be run before `black` to give Black the [last 
+Note that `docformatter` should be run before `black` to give Black the [last
 word][7].
 
 [0]: https://github.com/y-scope/clp
