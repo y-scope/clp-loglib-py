@@ -32,7 +32,7 @@ def load_tests(
     for test_class in TestCLPBase.__subclasses__():
         add_tests(suite, loader, test_class)
 
-    for test_class in TestCLPSegmentStreamingBase.__subclasses__():
-        add_tests(suite, loader, test_class)
+    for seg_test_class in TestCLPSegmentStreamingBase.__subclasses__():
+        add_tests(suite, loader, seg_test_class)
 
     return suite
