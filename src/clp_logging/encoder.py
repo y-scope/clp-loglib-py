@@ -62,6 +62,7 @@ FLOAT_VAR_TOKEN_MAX_BYTES: int = 9
 class CLPEncoder:
     """
     Namespace for all CLP encoding functions.
+
     Functions encode bytes from the log record to create a CLP message.
     """
 
@@ -69,6 +70,7 @@ class CLPEncoder:
     def emit_preamble(timestamp: int, timestamp_format: str, timezone: str) -> bytearray:
         """
         Create the encoded CLP preamble for a stream of encoded log messages.
+
         :param timestamp: Reference timestamp used to calculate deltas emitted
         with each message.
         :param timestamp_format: Timestamp format to be use when generating the
@@ -148,6 +150,7 @@ class CLPEncoder:
     def encode_float(token: bytes, clp_msg: bytearray) -> bool:
         """
         Encode `token` to float and append to `clp_msg`
+
         :param token: Guaranteed to contain: at least one digit (0-9) and at
         least one period (decimal point). However, could be malformed with
         multiple periods or negative signs.
@@ -228,6 +231,7 @@ class CLPEncoder:
     def emit_token(token_m: Match[bytes], clp_msg: bytearray) -> bytes:
         """
         Encode `token_m` appending it to `clp_msg` if it is a variable.
+
         :return: If the token was a variable returns the delimiter to append to
         logtype, otherwise returns the static text to append to the logtype.
         """
@@ -266,8 +270,9 @@ class CLPEncoder:
     @staticmethod
     def encode_timestamp(last_timestamp_ms: int, buf: bytearray) -> int:
         """
-        Encode the timestamp delta between `last_timestamp_ms` and the
-        current `time()` into `buf`
+        Encode the timestamp delta between `last_timestamp_ms` and the current
+        `time()` into `buf`
+
         :raises NotImplementedError: If unsupported timestamp delta size
         :return: The current timestamp (from `time.time()`)
         """
