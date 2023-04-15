@@ -38,6 +38,7 @@ class Log:
     classes inheriting from `CLPBaseReader`. A `Log` will only contain the
     decoded fields after `_decode` has been called. `Log` objects should be
     created using reader iterators to ensure they are valid.
+
     :param timestamp_ms: Time in ms since Unix epoch
     :param encoded_logtype: Encoded logtype
     :param encoded_variables: Encoded and untyped variables
@@ -64,6 +65,7 @@ class Log:
         """
         Populate the `variables`, `msg`, and `formatted_msg` fields by decoding
         the encoded `encoded_logtype and `encoded_variables`.
+
         :param timestamp_format: If provided, used by `datetime.strftime` to
         format the timestamp. If `None` then `datetime.isoformat` is used.
         :param timezone: Timezone to use when creating the timestamp from Unix
@@ -120,6 +122,7 @@ class CLPBaseReader(metaclass=ABCMeta):
     Abstract reader class used to build readers/decoders for CLP IR/"logs"
     produced by handlers/encoders. `readinto_buf` and `close` must be
     implemented by derived readers to correctly managed the underlying `_buf`.
+
     :param _buf: Underlying `bytearray` used to read the CLP IR
     :param view: `memoryview` of `bytearray` to allow convenient slicing
     :param metadata: Metadata from CLP IR header
@@ -133,7 +136,8 @@ class CLPBaseReader(metaclass=ABCMeta):
 
     def __init__(self, timestamp_format: Optional[str], chunk_size: int) -> None:
         """
-        Constructor
+        Constructor.
+
         :param timestamp_format: Format optionally provided by user to format
         timestamps from epoch time.
         :param chunk_size: initial size of `_buf` for reading
@@ -149,12 +153,13 @@ class CLPBaseReader(metaclass=ABCMeta):
 
     def read_preamble(self) -> int:
         """
-        Try to decode the preamble and populate `metadata`. If the metadata
-        is already read it instantly returns. We avoid calling
+        Try to decode the preamble and populate `metadata`. If the metadata is
+        already read it instantly returns. We avoid calling
         `CLPDecoder.decode_preamble` in `__init_` as `readinto_buf` may block,
         putting unexpected constraints on the user code. For example, any
         stream, file, etc. would need to be readable on a reader's construction
         rather than when the user actually begins to iterate the logs.
+
         :raises RuntimeError: If `readinto_buf` error or already EOF before
         preamble
         :return: Position in `view`
@@ -188,6 +193,7 @@ class CLPBaseReader(metaclass=ABCMeta):
     def readinto_buf(self, offset: int) -> int:
         """
         Abstract method to populate the underlying `_buf`.
+
         :return: Bytes read (0 for EOF), < 0 on error
         """
         raise NotImplementedError("Readinto_buf must be implemented by derived readers")
@@ -226,6 +232,7 @@ class CLPBaseReader(metaclass=ABCMeta):
     def skip_nlogs(self, n: int = 1) -> int:
         """
         Skip the next `n` log records/events.
+
         :return: Number of logs skipped
         """
         if self.read_preamble() <= 0:
@@ -242,7 +249,9 @@ class CLPBaseReader(metaclass=ABCMeta):
 
     def skip_to_time(self, time_ms: int) -> int:
         """
-        Skip all logs with Unix epoch timestamp before `time_ms`.  After
+        Skip all logs with Unix epoch timestamp before `time_ms`.
+
+        After
         being called the next `Log` returned by the reader (e.g. calling
         `__next__`) will return the first log where `Log.timestamp_ms` >=
         `time_ms`
@@ -267,10 +276,11 @@ class CLPBaseReader(metaclass=ABCMeta):
 
     def _readinto(self, offset: int, log: Optional[Log]) -> int:
         """
-        Read and decode from `view` into `log`. `view` is expected to be
-        past the preamble, so `read_preamble` must have been called prior.
-        `pos` is only updated when `_buf` and `view` are updated. This allows
-        callers to re-read the contents inside `_buf` and `view` if desired.
+        Read and decode from `view` into `log`. `view` is expected to be past
+        the preamble, so `read_preamble` must have been called prior. `pos` is
+        only updated when `_buf` and `view` are updated. This allows callers to
+        re-read the contents inside `_buf` and `view` if desired.
+
         :param offset: Position in `view` to begin decoding from
         :param log: `Log` object to store tokens in, if None tokens are dropped
         without further processing and storing
@@ -326,6 +336,7 @@ class CLPBaseReader(metaclass=ABCMeta):
         `token_type`. Bytes in the raw log that match special encoding bytes
         were escaped, so we must unescape any set of bytes copied directly from
         `_buf` (dict variables and logtype).
+
         :raises RuntimeError: If `token_type & ID_MASK` is invalid
         """
         token_id: int = token_type & ID_MASK
@@ -350,7 +361,8 @@ class CLPBaseReader(metaclass=ABCMeta):
 
 class CLPStreamReader(CLPBaseReader):
     """
-    Simple stream reader that will decompress the Zstandard stream
+    Simple stream reader that will decompress the Zstandard stream.
+
     :param timestamp_format: Format optionally provided by user to format
     timestamps from epoch time.
     :param chunk_size: initial size of `CLPBaseReader._buf` for reading
@@ -374,6 +386,7 @@ class CLPStreamReader(CLPBaseReader):
     def readinto_buf(self, offset: int) -> int:
         """
         Read the CLP IR stream directly or through Zstandard decompression.
+
         :return: Bytes read (0 for EOF), < 0 on error
         """
         if self.zstream:
@@ -390,7 +403,9 @@ class CLPStreamReader(CLPBaseReader):
 
 
 class CLPFileReader(CLPStreamReader):
-    """Wrapper class that calls `open` for convenience."""
+    """
+    Wrapper class that calls `open` for convenience.
+    """
 
     def __init__(
         self,
@@ -409,11 +424,12 @@ class CLPFileReader(CLPStreamReader):
 
 class _CLPSegmentStreamingReader:
     """
-    Private reader class used to read stream segments for CLP IR/"logs"
-    produced by handlers/encoders. The members in this class are used to
-    maintain a single operation for segment reading/streaming. The instance
-    of this class should not be reused, meaning that for each segment streaming,
-    there should be an individual instance of this class associated.
+    Private reader class used to read stream segments for CLP IR/"logs" produced
+    by handlers/encoders. The members in this class are used to maintain a
+    single operation for segment reading/streaming. The instance of this class
+    should not be reused, meaning that for each segment streaming, there should
+    be an individual instance of this class associated.
+
     :param istream: input stream to read from. It should be an abstracted
     uncompressed seekable IR stream, and it should have the method `readinto`
     :param ostream: output stream to write into. It should be an abstracted
@@ -446,7 +462,8 @@ class _CLPSegmentStreamingReader:
         chunk_size: int = 4096,
     ) -> None:
         """
-        Constructor
+        Constructor.
+
         :param istream: seekable uncompressed input stream
         :param ostream: uncompressed output stream
         :param offset: position to start reading from
@@ -472,6 +489,7 @@ class _CLPSegmentStreamingReader:
     def readinto_buf(self, offset: int) -> int:
         """
         Populate the underlying `_buf`.
+
         :return: Bytes read (0 for EOF), < 0 on error
         """
         # see https://github.com/python/typing/issues/659
@@ -482,7 +500,9 @@ class _CLPSegmentStreamingReader:
     def init_preamble(self) -> Optional[bytearray]:
         """
         Initialize the CLP IR header for the coming read, and initialize
-        `last_timestamp_ms`. If metadata is not provided, it will attempt to
+        `last_timestamp_ms`.
+
+        If metadata is not provided, it will attempt to
         parse the header from `_buf` and set `init_pos`.
         :return: CLP IR header represented as a byte array.
         """
@@ -513,6 +533,7 @@ class _CLPSegmentStreamingReader:
         Use the latest processed real timestamp to construct a legal CLP IR
         metadata, which can be used to resume read from current position in
         later segment streaming.
+
         However, if the EOF is reached, None should be returned since the
         terminated read should not be resumed.
         :return: CLP IR metadata header.
@@ -527,6 +548,7 @@ class _CLPSegmentStreamingReader:
         """
         Check if the output stream has enough space reserved to write
         `len_to_write` of bytes.
+
         :return: True if the ostream has no space to write.
         """
         return (
@@ -536,7 +558,9 @@ class _CLPSegmentStreamingReader:
 
     def stream_ir_segment(self) -> Tuple[int, Optional[Metadata]]:
         """
-        Streaming from istream to ostream, starting from `offset`. It stops
+        Streaming from istream to ostream, starting from `offset`.
+
+        It stops
         either the istream is consumed, or the number of bytes written into the
         ostream exceeds `max_bytes_to_write`. This method will gaurantee to read
         till the last valid log message from the IR.
@@ -654,11 +678,12 @@ class _CLPSegmentStreamingReader:
 class CLPSegmentStreaming:
     """
     Wrapper for _CLPSegmentStreamingReader.
+
     As explained in _CLPSegmentStreamingReader, its members are designed to
-    maintain a single read operation and thus not reuseable.
-    This class encapsulate the actual stream reader class and provide a static
-    method to ensure that each individual read operation will have its own
-    instance of _CLPSegmentStreamingReader.
+    maintain a single read operation and thus not reusable. This class
+    encapsulates the actual stream reader class and provides a static method to
+    ensure that each individual read operation will have its own instance of
+    _CLPSegmentStreamingReader.
     """
 
     @staticmethod

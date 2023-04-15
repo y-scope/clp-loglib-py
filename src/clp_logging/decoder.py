@@ -24,6 +24,7 @@ from clp_logging.protocol import (
 class CLPDecoder:
     """
     Namespace for all CLP decoding functions.
+
     Functions decode bytes extracting CLP tokens and translate them to their
     true type and value.
     """
@@ -39,6 +40,7 @@ class CLPDecoder:
         """
         See `CLPEncoder.encode_float` for detailed breakdown of CLP float
         encoding.
+
         :return: Tuple of `float` and `str` value of token
         """
         backing_int: int = int.from_bytes(token, BYTE_ORDER)
@@ -69,6 +71,7 @@ class CLPDecoder:
     def decode_preamble(src: bytes, pos: int) -> Tuple[Optional[Metadata], int]:
         """
         Decode `src` start at `pos` extracting the preamble/metadata.
+
         :return: On success returns the metadata and the index read up to in
         `src` (including `pos`). On error returns None and negative int based
         on error: -1 if magic number mismatch, -2 if metadata not in json
@@ -103,10 +106,10 @@ class CLPDecoder:
     def decode_token(src: memoryview, pos: int = 0) -> Tuple[int, bytes, int]:
         """
         Decode `src` start at `pos` extracting the next token.
+
         Note, we can use negative values despite `token_type` being an `int` as
         the integer value of an individual byte is restricted to [0:256) (see
-        `bytes`). Therefore `token_type` (`type_byte[0]`) can never be
-        negative.
+        `bytes`). Therefore `token_type` (`type_byte[0]`) can never be negative.
 
         :param src: Bytes to decode
         :param pos: The position in `src` to begin decoding from

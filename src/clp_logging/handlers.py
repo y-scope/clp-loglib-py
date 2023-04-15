@@ -37,15 +37,18 @@ WARN_PREFIX: str = " [WARN][clp_logging]"
 def _init_timeinfo(fmt: Optional[str], tz: Optional[str]) -> Tuple[str, str]:
     """
     Return the timestamp format and timezone (in TZID format) that should be
-    used. If not specified by the user, this function will choose default
-    values to use.
+    used. If not specified by the user, this function will choose default values
+    to use.
+
     The timestamp format (`fmt`) defaults to a format for the Java readers, due
     to compatibility issues between language time libraries.
     (`datatime.isoformat` is always used for the timestamp format in python
     readers.)
-    The timzeone format (`tz`) first defaults to the system local timezone. If
-    that fails it will default to UTC.
-    In the future sanitization of user input should also go here.
+
+    The timezone format (`tz`) first defaults to the system local timezone.
+
+    If that fails it will default to UTC. In the future sanitization
+    of user input should also go here.
 
     :param fmt: Timestamp format written in preamble to be used when generating
     the logs with a reader.
@@ -73,8 +76,8 @@ class CLPBaseHandler(logging.Handler, metaclass=ABCMeta):
     # override
     def setFormatter(self, fmt: Optional[logging.Formatter]) -> None:
         """
-        Check user `fmt` and remove any timestamp token to avoid double
-        printing the timestamp.
+        Check user `fmt` and remove any timestamp token to avoid double printing
+        the timestamp.
         """
         if not fmt or not fmt._fmt:
             return
@@ -129,13 +132,12 @@ class CLPBaseHandler(logging.Handler, metaclass=ABCMeta):
 
 class CLPLogLevelTimeout:
     """
-    A configurable timeout feature based on logging level that can be added to
-    a CLPHandler. To schedule a timeout, two timers are calculated with each
-    new log event. There is no distinction between the timer that triggers a
-    timeout and once a timeout occurs both timers are reset. A timeout will
-    always flush the zstandard frame and then call a user supplied function
-    (`timeout_fn`). An additional timeout is always triggered on closing the
-    logging handler.
+    A configurable timeout feature based on logging level that can be added to a
+    CLPHandler. To schedule a timeout, two timers are calculated with each new
+    log event. There is no distinction between the timer that triggers a timeout
+    and once a timeout occurs both timers are reset. A timeout will always flush
+    the zstandard frame and then call a user supplied function (`timeout_fn`).
+    An additional timeout is always triggered on closing the logging handler.
 
     The two timers are implemented using `threading.Timer`. Each timer utilizes
     a map that associates each log level to a time delta (in milliseconds).
@@ -198,7 +200,6 @@ class CLPLogLevelTimeout:
         :param soft_timeout_deltas: A dictionary, mapping a log level (as an
         int) to the maximum elapsed time to wait (in milliseconds) for a new
         log event to be generated before triggering a timeout.
-
         """
         self.hard_timeout_deltas: Dict[int, int] = hard_timeout_deltas
         self.soft_timeout_deltas: Dict[int, int] = soft_timeout_deltas
@@ -289,10 +290,11 @@ class CLPLogLevelTimeout:
 class CLPSockListener:
     """
     Server that listens to a named Unix domain socket for `CLPSockHandler`
-    instances writing CLP IR. Can be started by explicitly calling
-    `CLPSockListener.fork` or by instantiating a `CLPSockHandler` with
-    `create_listener=True`.
-    Can be stopped by either sending the process SIGINT, SIGTERM, or `EOF_CHAR`.
+    instances writing CLP IR.
+
+    Can be started by explicitly calling `CLPSockListener.fork` or by
+    instantiating a `CLPSockHandler` with `create_listener=True`. Can be stopped
+    by either sending the process SIGINT, SIGTERM, or `EOF_CHAR`.
     """
 
     _signaled: ClassVar[bool] = False
@@ -300,6 +302,8 @@ class CLPSockListener:
     @staticmethod
     def _try_bind(sock: socket.socket, sock_path: Path) -> int:
         """
+        Tries to bind the given socket to the given path.
+
         Bind will fail if the socket file exists due to:
             a. Another listener currently exists and is running
                 -> try to connect to it
@@ -334,6 +338,7 @@ class CLPSockListener:
         """
         Continuously reads from an individual `CLPSockHandler` and sends the
         received messages to the aggregator thread.
+
         :param conn: Client socket where encoded messages and their length are
         received.
         :param log_queue: Queue with `CLPSockListener._aggregator` thread to
@@ -381,6 +386,7 @@ class CLPSockListener:
         Continuously receive encoded messages from
         `CLPSockListener._handle_client` threads and write them to a Zstandard
         stream.
+
         :param log_path: Path to log file and used to derive socket name.
         :param log_queue: Queue with `CLPSockListener._handle_client` threads
         to write encoded messages.
@@ -450,8 +456,9 @@ class CLPSockListener:
         loglevel_timeout: Optional[CLPLogLevelTimeout] = None,
     ) -> int:
         """
-        The `CLPSockListener` server function run in a new process.
-        Writes 1 byte back to parent process for synchronization.
+        The `CLPSockListener` server function run in a new process. Writes 1
+        byte back to parent process for synchronization.
+
         :param parent_fd: Used to communicate to parent `CLPSockHandler`
         process that `_try_bind` has finished.
         :param log_path: Path to log file.
@@ -517,8 +524,9 @@ class CLPSockListener:
         """
         Fork a process running `CLPSockListener._server` and use `os.setsid()`
         to give it another session id (and process group id). The parent will
-        not return until the forked listener has either bound the socket
-        or finished trying to.
+        not return until the forked listener has either bound the socket or
+        finished trying to.
+
         :param log_path: Path to log file and used to derive socket name.
         :param timestamp_format: Timestamp format written in preamble to be
         used when generating the logs with a reader.
@@ -555,9 +563,10 @@ class CLPSockListener:
 class CLPSockHandler(CLPBaseHandler):
     """
     Similar to `logging.Handler.SocketHandler`, but the log is written to the
-    socket in CLP IR encoding rather than bytes. It is also simplified to only
-    work with Unix domain sockets.
-    The log is written to a socket named `log_path.with_suffix(".sock")`
+    socket in CLP IR encoding rather than bytes.
+
+    It is also simplified to only work with Unix domain sockets. The log is
+    written to a socket named `log_path.with_suffix(".sock")`
     """
 
     def __init__(
@@ -572,6 +581,7 @@ class CLPSockHandler(CLPBaseHandler):
     ) -> None:
         """
         Constructor method that optionally spawns a `CLPSockListener`.
+
         :param log_path: Path to log file written by `CLPSockListener` used to
         derive socket name.
         :param create_listener: If true and the handler could not connect to an
@@ -661,8 +671,9 @@ class CLPSockHandler(CLPBaseHandler):
 
 class CLPStreamHandler(CLPBaseHandler):
     """
-    Similar to `logging.StreamHandler`, but the log is written to `stream`
-    in CLP IR encoding rather than bytes or a string.
+    Similar to `logging.StreamHandler`, but the log is written to `stream` in
+    CLP IR encoding rather than bytes or a string.
+
     :param stream: Output stream of bytes to write CLP encoded log messages to
     """
 
@@ -746,7 +757,9 @@ class CLPStreamHandler(CLPBaseHandler):
 
 
 class CLPFileHandler(CLPStreamHandler):
-    """Wrapper class that calls `open` for convenience."""
+    """
+    Wrapper class that calls `open` for convenience.
+    """
 
     def __init__(
         self,
