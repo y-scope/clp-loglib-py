@@ -492,7 +492,8 @@ class _CLPSegmentStreamingReader:
 
         :return: Bytes read (0 for EOF), < 0 on error
         """
-        bytes_read: int = self.istream.readinto(self.view[offset:])
+        # see https://github.com/python/typing/issues/659
+        bytes_read: int = self.istream.readinto(self.view[offset:])  # type:ignore
         self.total_bytes_read += bytes_read
         return bytes_read
 
@@ -539,6 +540,7 @@ class _CLPSegmentStreamingReader:
         """
         if self.eof_reached:
             return None
+        assert self.metadata is not None
         self.metadata[METADATA_REFERENCE_TIMESTAMP_KEY] = str(self.last_timestamp_ms)
         return self.metadata
 
@@ -550,7 +552,7 @@ class _CLPSegmentStreamingReader:
         :return: True if the ostream has no space to write.
         """
         return (
-            self.max_bytes_to_write != None
+            self.max_bytes_to_write is not None
             and (self.total_bytes_written + len_to_write + 1) > self.max_bytes_to_write
         )
 
@@ -580,7 +582,8 @@ class _CLPSegmentStreamingReader:
                 )
             self.istream.seek(self.offset)
 
-        bytes_read: int = self.readinto_buf(0)
+        bytes_read: int
+        bytes_read = self.readinto_buf(0)
         if bytes_read == 0:
             return 0, None
         elif bytes_read < 0:
@@ -599,6 +602,7 @@ class _CLPSegmentStreamingReader:
             raise RuntimeError("Failed to write into output stream.")
         self.total_bytes_written += bytes_written
 
+        bytes_consumed: int
         offset: int = self.init_pos
         log_buf: bytearray = bytearray(0)
         while True:
@@ -625,7 +629,7 @@ class _CLPSegmentStreamingReader:
                 if ID_TIMESTAMP == token_id:
                     log_length: int = len(log_buf)
                     if self.ostream_out_of_write_space(log_length):
-                        bytes_consumed: int = (
+                        bytes_consumed = (
                             self.total_bytes_read - log_length - (self.valid_buf_len - offset)
                         )
                         self.ostream.write(EOF_CHAR)
@@ -657,12 +661,12 @@ class _CLPSegmentStreamingReader:
                 self._buf = tmp
                 self.view = memoryview(self._buf)
 
-            bytes_read: int = self.readinto_buf(valid)
+            bytes_read = self.readinto_buf(valid)
             if bytes_read == 0:
                 # No more to read. This is the end of the current segment.
                 self.ostream.write(EOF_CHAR)
                 # Log in the current buffer is not written into ostream.
-                bytes_consumed: int = self.total_bytes_read - len(log_buf) - valid
+                bytes_consumed = self.total_bytes_read - len(log_buf) - valid
                 return bytes_consumed, self.generate_return_metadata()
             elif bytes_read < 0:
                 raise RuntimeError("Failed to read from input stream.")
