@@ -259,9 +259,7 @@ class CLPLogLevelTimeout:
         if new_hard_timeout_ts < self.next_hard_timeout_ts:
             if self.hard_timeout_thread:
                 self.hard_timeout_thread.cancel()
-            self.hard_timeout_thread = Timer(
-                new_hard_timeout_ts / 1000 - time.time(), self.timeout
-            )
+            self.hard_timeout_thread = Timer(new_hard_timeout_ts / 1000 - time.time(), self.timeout)
             self.hard_timeout_thread.setDaemon(True)
             self.hard_timeout_thread.start()
             self.next_hard_timeout_ts = new_hard_timeout_ts
