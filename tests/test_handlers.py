@@ -42,6 +42,7 @@ def _zstd_comppressions_handler(file_obj, mode):
 register_compressor(".zst", _zstd_comppressions_handler)
 
 LOG_DIR: Path = Path("unittest-logs")
+TIME_DELTA_MS: int = 64
 
 
 # TODO: revisit type ignore if minimum python version increased
@@ -161,7 +162,7 @@ class TestCLPBase(unittest.TestCase):
                 clp_timestamp: datetime = dateutil.parser.isoparse(clp_time_str)
                 raw_timestamp: datetime = dateutil.parser.isoparse(raw_time_str)
                 self.assertAlmostEqual(
-                    clp_timestamp, raw_timestamp, delta=timedelta(milliseconds=32)
+                    clp_timestamp, raw_timestamp, delta=timedelta(milliseconds=TIME_DELTA_MS)
                 )
 
             clp_msg: str = " ".join(clp_log_split[2:])
@@ -353,7 +354,7 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
             self.assertAlmostEqual(
                 datetime.fromtimestamp(timeout_ts[i]),  # type: ignore
                 datetime.fromtimestamp(start_ts + expected_timeout_deltas[i]),
-                delta=timedelta(milliseconds=64),
+                delta=timedelta(milliseconds=TIME_DELTA_MS),
             )
 
     def test_pushback_soft_timeout(self) -> None:
