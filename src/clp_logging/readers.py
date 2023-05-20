@@ -299,9 +299,7 @@ class CLPBaseReader(metaclass=ABCMeta):
                 elif token_type == -1:
                     break
                 elif token_type < -1:
-                    raise RuntimeError(
-                        f"Error decoding token: 0x{token.hex()}, type: {token_type}"
-                    )
+                    raise RuntimeError(f"Error decoding token: 0x{token.hex()}, type: {token_type}")
                 offset += pos
 
                 if log:
@@ -347,9 +345,7 @@ class CLPBaseReader(metaclass=ABCMeta):
                 t = RE_DELIM_VAR_UNESCAPE.sub(RE_SUB_DELIM_VAR_UNESCAPE, t)
             log.encoded_variables.append(t)
         elif token_id == ID_LOGTYPE:
-            log.encoded_logtype = RE_DELIM_VAR_UNESCAPE.sub(
-                RE_SUB_DELIM_VAR_UNESCAPE, bytes(token)
-            )
+            log.encoded_logtype = RE_DELIM_VAR_UNESCAPE.sub(RE_SUB_DELIM_VAR_UNESCAPE, bytes(token))
         elif token_id == ID_TIMESTAMP:
             delta_ms: int = int.from_bytes(token, BYTE_ORDER, signed=True)
             log.timestamp_ms = self.last_timestamp_ms + delta_ms
@@ -618,9 +614,7 @@ class _CLPSegmentStreamingReader:
                 elif token_type == -1:
                     break  # Populate the buffer and decode again
                 elif token_type < -1:
-                    raise RuntimeError(
-                        f"Error decoding token: 0x{token.hex()}, type: {token_type}"
-                    )
+                    raise RuntimeError(f"Error decoding token: 0x{token.hex()}, type: {token_type}")
 
                 log_buf += self.view[offset : offset + pos]
                 offset += pos
