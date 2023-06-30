@@ -1,4 +1,4 @@
-name: Lint, test, and build package
+name: Lint, build, and test package
 
 on:
   pull_request:
@@ -35,8 +35,63 @@ jobs:
       - name: mypy
         run: mypy src/ tests/
 
+      - name: Build
+        run: python -m build
+
+      - name: Upload wheel file
+        uses: actions/upload-artifact@v3
+        with:
+          name: wheel-${{ matrix.python-version }}
+          path: dist/*
+          retention-days: 1
+
+  test:
+    needs: [build]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.11"]
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: wheel-${{ matrix.python-version }}
+          path: dist/
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install dist/clp_logging-*.whl
+          pip install -r requirements-test.txt
+
       - name: Test
         run: python -m unittest -bv
 
-      - name: Build
-        run: python -m build
+  test-py36:
+    needs: [build]
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.6"
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: wheel-3.8
+          path: dist/
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install dist/clp_logging-*.whl
+          pip install -r requirements-test.txt
+
+      - name: Test
+        run: python -m unittest -bv
