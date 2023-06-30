@@ -206,7 +206,7 @@ Built/packaged on Python 3.8 for convenience regarding type annotation.
 1. Create and enter a virtual environment:
    `python3.8 -m venv venv; . ./venv/bin/activate`
 2. Install development dependencies:
-   `pip install -r requirements-dev.txt`
+   `pip install .[dev]`
 3. Build:
    `python -m build`
 
@@ -219,10 +219,8 @@ result in a test reporting a false positive error.
 1. Create and enter a virtual environment:
    `python -m venv venv; .  ./venv/bin/activate`
 2. Install development dependencies:
-   `pip install -r requirements-dev.txt`
-3. Install:
-   `pip install dist/clp_logging-*-py3-none-any.whl` or `pip install -e .`
-4. Run unittest:
+   `pip install .[test]`
+3. Run unittest:
    `python -m unittest -bv`
 
 ## Contributing
@@ -239,6 +237,9 @@ formatting tools (found in [requirements-dev.txt](requirements-dev.txt)):
 * [Black][6]: `black src tests`
   * This formats the code according to Black's code-style rules. You should
     review and add any changes to your PR.
+* [ruff][8]: `ruff check src tests`
+  * This performs linting according to PEPs. You should review and add any
+    changes to your PR.
 
 Note that `docformatter` should be run before `black` to give Black the [last
 word][7].
@@ -251,3 +252,4 @@ word][7].
 [5]: https://docformatter.readthedocs.io/en/latest/
 [6]: https://black.readthedocs.io/en/stable/index.html
 [7]: https://docformatter.readthedocs.io/en/latest/faq.html#interaction-with-black
+[8]: https://beta.ruff.rs/docs/
