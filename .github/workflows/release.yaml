@@ -3,7 +3,7 @@ name: Upload package to pypi
 on:
   push:
     tags:
-      - "v**"
+      - v*
 
 jobs:
   sanity:
