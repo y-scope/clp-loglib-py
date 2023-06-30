@@ -6,7 +6,7 @@ import unittest
 from datetime import datetime, timedelta, tzinfo
 from math import floor
 from multiprocessing.sharedctypes import Array, Value, Synchronized, SynchronizedArray
-from smart_open import open, register_compressor # type: ignore
+from smart_open import open, register_compressor  # type: ignore
 from pathlib import Path
 from typing import cast, Dict, IO, List, Optional, Union
 from zstandard import (
