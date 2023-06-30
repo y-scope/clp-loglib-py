@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 import logging
 import os
 import time
-from datetime import datetime, tzinfo
+from datetime import tzinfo
 from math import floor
 from pathlib import Path
 from queue import Empty, Queue
@@ -11,7 +11,7 @@ import socket
 from threading import Thread, Timer
 import sys
 from types import FrameType
-from typing import Callable, ClassVar, Dict, IO, List, Optional, Tuple, TypeVar, Union
+from typing import Callable, ClassVar, Dict, IO, Optional, Tuple, Union
 
 import dateutil.tz
 from zstandard import FLUSH_FRAME, ZstdCompressor, ZstdCompressionWriter
@@ -83,18 +83,14 @@ class CLPBaseHandler(logging.Handler, metaclass=ABCMeta):
             return
 
         fmt_str: str = fmt._fmt
-        style: str = ""
         if "asctime" in fmt_str:
             found: Optional[str] = None
             if fmt_str.startswith("%(asctime)s "):
                 found = "%(asctime)s"
-                style = "%"
             elif fmt_str.startswith("{asctime} "):
                 found = "{asctime}"
-                style = "{"
             elif fmt_str.startswith("${asctime} "):
                 found = "${asctime}"
-                style = "$"
 
             if found:
                 fmt._fmt = fmt_str.replace(found, "")
@@ -240,10 +236,10 @@ class CLPLogLevelTimeout:
 
         :param loglevel: The log level (verbosity) of the current log.
         :param log_timestamp_ms: The timestamp in milliseconds of the current
-        log.
+            log.
         :param logfn: A function used for internal logging by the library. This
-        allows us to correctly log through the handler itself rather than just
-        printing to stdout/stderr.
+            allows us to correctly log through the handler itself rather than
+            just printing to stdout/stderr.
         """
         hard_timeout_delta: int
         if loglevel not in self.hard_timeout_deltas:
@@ -659,7 +655,7 @@ class CLPSockHandler(CLPBaseHandler):
     def stop_listener(self) -> None:
         try:
             self.sock.send((0).to_bytes(SIZEOF_INT, BYTE_ORDER))
-        except:
+        except Exception:
             sock: socket.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             sock.connect(str(self.sock_path))
             sock.send((0).to_bytes(SIZEOF_INT, BYTE_ORDER))

@@ -6,9 +6,9 @@ import unittest
 from datetime import datetime, timedelta, tzinfo
 from math import floor
 from multiprocessing.sharedctypes import Array, Value, Synchronized, SynchronizedArray
-from smart_open import open, register_compressor
+from smart_open import open, register_compressor # type: ignore
 from pathlib import Path
-from typing import cast, ClassVar, Dict, IO, List, Optional, Union
+from typing import cast, Dict, IO, List, Optional, Union
 from zstandard import (
     ZstdCompressor,
     ZstdDecompressor,
@@ -354,7 +354,7 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
         time_to_last_timeout: float = (start_ts + expected_timeout_deltas[-1]) - time.time()
         time.sleep(time_to_last_timeout)
 
-        self.logger.log(logging.INFO, f"ensure close flushes correctly")
+        self.logger.log(logging.INFO, "ensure close flushes correctly")
 
         self.compare_all_logs()
         self.assertEqual(timeout_count.value, expected_timeout_count)

@@ -28,6 +28,7 @@ dev = [
     "docformatter >= 1.5.1",
     "mypy >= 0.982",
     "ruff >= 0.0.275",
+    "types-python-dateutil >= 2.8.19.2",
 ]
 test = [
     "smart_open >= 6.3.0",
