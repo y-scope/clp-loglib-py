@@ -3,11 +3,15 @@ name: Upload package to pypi
 on:
   push:
     tags:
+      - "v**"
 
 jobs:
+  sanity:
+    uses: ./.github/workflows/package.yaml
   # https://docs.pypi.org/trusted-publishers/using-a-publisher/
   pypi-publish:
     name: upload release to PyPI
+    needs: [sanity]
     runs-on: ubuntu-latest
     environment: release
     permissions:
