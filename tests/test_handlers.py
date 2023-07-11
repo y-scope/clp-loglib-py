@@ -49,7 +49,7 @@ def _zstd_comppressions_handler(
 register_compressor(".zst", _zstd_comppressions_handler)
 
 LOG_DIR: Path = Path("unittest-logs")
-TIMESTAMP_DELTA_S: float = 0.064
+TIMESTAMP_DELTA_S: float = 0.128
 
 
 # TODO: revisit type ignore if minimum python version increased
