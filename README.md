@@ -210,6 +210,8 @@ Built/packaged on Python 3.8 for convenience regarding type annotation.
 2. Install the project in editable mode, the development dependencies, and the test dependencies:
    `pip install -e .[dev,test]`
 
+Note: you may need to upgrade pip first for `-e` to work. If so, run: `pip install --upgrade pip`
+
 ### Packaging
 
 To build a package for distribution run:
@@ -220,7 +222,7 @@ To build a package for distribution run:
 To run the unit tests run:
    `python -m unittest -bv`
 
-Note the baseline comparison logging handler and the CLP handler both get
+Note: the baseline comparison logging handler and the CLP handler both get
 unique timestamps. It is possible for these timestamps to differ, which will
 result in a test reporting a false positive error.
 

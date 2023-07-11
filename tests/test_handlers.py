@@ -49,7 +49,7 @@ def _zstd_comppressions_handler(
 register_compressor(".zst", _zstd_comppressions_handler)
 
 LOG_DIR: Path = Path("unittest-logs")
-TIMESTAMP_DELTA_MS: int = 64
+TIMESTAMP_DELTA_S: float = 0.064
 
 
 # TODO: revisit type ignore if minimum python version increased
@@ -167,10 +167,10 @@ class TestCLPBase(unittest.TestCase):
             if test_time:
                 clp_time_str: str = " ".join(clp_log_split[0:2])
                 raw_time_str: str = " ".join(raw_log_split[0:2])
-                clp_timestamp: datetime = dateutil.parser.isoparse(clp_time_str)
-                raw_timestamp: datetime = dateutil.parser.isoparse(raw_time_str)
                 self.assertAlmostEqual(
-                    clp_timestamp, raw_timestamp, delta=timedelta(milliseconds=TIMESTAMP_DELTA_MS)
+                    dateutil.parser.isoparse(clp_time_str).timestamp(),
+                    dateutil.parser.isoparse(raw_time_str).timestamp(),
+                    delta=TIMESTAMP_DELTA_S,
                 )
 
             clp_msg: str = " ".join(clp_log_split[2:])
@@ -350,8 +350,9 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
             self.logger.log(loglevel, f"log{i} with loglevel={loglevel}")
             time.sleep(delay)
 
-        # sleep long enough so that the final expected timeout can # occur
-        time_to_last_timeout: float = (start_ts + expected_timeout_deltas[-1]) - time.time()
+        # We want sleep long enough so that the final expected timeout can
+        # occur, but also ensure time.sleep recieves a non-negative number.
+        time_to_last_timeout: float = max(0, (start_ts + expected_timeout_deltas[-1]) - time.time())
         time.sleep(time_to_last_timeout)
 
         self.logger.log(logging.INFO, "ensure close flushes correctly")
@@ -360,9 +361,9 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
         self.assertEqual(timeout_count.value, expected_timeout_count)
         for i in range(expected_timeout_count):
             self.assertAlmostEqual(
-                datetime.fromtimestamp(timeout_ts[i]),  # type: ignore
-                datetime.fromtimestamp(start_ts + expected_timeout_deltas[i]),
-                delta=timedelta(milliseconds=TIMESTAMP_DELTA_MS),
+                datetime.fromtimestamp(timeout_ts[i]).timestamp(),  # type: ignore
+                datetime.fromtimestamp(start_ts + expected_timeout_deltas[i]).timestamp(),
+                delta=TIMESTAMP_DELTA_S,
             )
 
     def test_pushback_soft_timeout(self) -> None:
