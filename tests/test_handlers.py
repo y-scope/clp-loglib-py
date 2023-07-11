@@ -3,7 +3,7 @@ import logging
 import os
 import time
 import unittest
-from datetime import datetime, timedelta, tzinfo
+from datetime import datetime, tzinfo
 from math import floor
 from multiprocessing.sharedctypes import Array, Value, Synchronized, SynchronizedArray
 from smart_open import open, register_compressor  # type: ignore
