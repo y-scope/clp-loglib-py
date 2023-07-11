@@ -233,7 +233,7 @@ class CLPEncoder:
         Encode `token_m` appending it to `clp_msg` if it is a variable.
 
         :return: If the token was a variable returns the delimiter to append to
-        logtype, otherwise returns the static text to append to the logtype.
+            logtype, otherwise returns the static text to append to the logtype.
         """
         token: bytes = token_m.group(0)
 

@@ -189,13 +189,13 @@ class CLPLogLevelTimeout:
         timeout values in milliseconds.
 
         :param timeout_fn: A user function that will be called when a timeout
-        (hard or soft) occurs.
+            (hard or soft) occurs.
         :param hard_timeout_deltas: A dictionary, mapping a log level (as an
-        int) to the maximum elapsed time (in milliseconds) between generating a
-        log event and triggering a timeout.
+            int) to the maximum elapsed time (in milliseconds) between
+            generating a log event and triggering a timeout.
         :param soft_timeout_deltas: A dictionary, mapping a log level (as an
-        int) to the maximum elapsed time to wait (in milliseconds) for a new
-        log event to be generated before triggering a timeout.
+            int) to the maximum elapsed time to wait (in milliseconds) for a new
+            log event to be generated before triggering a timeout.
         """
         self.hard_timeout_deltas: Dict[int, int] = hard_timeout_deltas
         self.soft_timeout_deltas: Dict[int, int] = soft_timeout_deltas
@@ -522,12 +522,12 @@ class CLPSockListener:
         finished trying to.
 
         :param log_path: Path to log file and used to derive socket name.
-        :param timestamp_format: Timestamp format written in preamble to be
-        used when generating the logs with a reader.
-        :param timezone: Timezone written in preamble to be used when
-        generating the timestamp from Unix epoch time.
+        :param timestamp_format: Timestamp format written in preamble to be used
+            when generating the logs with a reader.
+        :param timezone: Timezone written in preamble to be used when generating
+            the timestamp from Unix epoch time.
         :param timeout: timeout in seconds to prevent block operations from
-        never returning and not closing properly on signal/EOF_CHAR
+            never returning and not closing properly on signal/EOF_CHAR
         :return: child pid
         """
         sock_path: Path = log_path.with_suffix(".sock")
