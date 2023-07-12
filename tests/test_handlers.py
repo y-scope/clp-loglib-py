@@ -49,8 +49,10 @@ def _zstd_comppressions_handler(
 register_compressor(".zst", _zstd_comppressions_handler)
 
 LOG_DIR: Path = Path("unittest-logs")
-TIMESTAMP_DELTA_S: float = 0.128
 
+LOG_DELAY_S: float = 0.064
+TIMEOUT_PADDING_S: float = 0.128
+ASSERT_TIMESTAMP_DELTA_S: float = 0.256
 
 # TODO: revisit type ignore if minimum python version increased
 class DtStreamHandler(logging.StreamHandler):  # type: ignore
@@ -170,7 +172,7 @@ class TestCLPBase(unittest.TestCase):
                 self.assertAlmostEqual(
                     dateutil.parser.isoparse(clp_time_str).timestamp(),
                     dateutil.parser.isoparse(raw_time_str).timestamp(),
-                    delta=TIMESTAMP_DELTA_S,
+                    delta=ASSERT_TIMESTAMP_DELTA_S,
                 )
 
             clp_msg: str = " ".join(clp_log_split[2:])
@@ -363,50 +365,53 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
             self.assertAlmostEqual(
                 datetime.fromtimestamp(timeout_ts[i]).timestamp(),  # type: ignore
                 datetime.fromtimestamp(start_ts + expected_timeout_deltas[i]).timestamp(),
-                delta=TIMESTAMP_DELTA_S,
+                delta=ASSERT_TIMESTAMP_DELTA_S,
             )
 
     def test_pushback_soft_timeout(self) -> None:
-        delta_ms: int = 400
-        delta_s: float = delta_ms / 1000
+        delay: float = LOG_DELAY_S
+        delta_s: float = delay * 2
+        delta_ms: int = int(delta_s * 1000)
         self._test_timeout(
             loglevels=[logging.INFO, logging.INFO, logging.INFO],
-            delay=0.2,
+            delay=delay,
             hard_deltas={logging.INFO: 30 * 60 * 1000},
             soft_deltas={logging.INFO: delta_ms},
             # delay < soft delta, so timeout push back should occur
             # timeout = final log occurrence + soft delta
             expected_timeout_count=2,
             expected_timeout_deltas=[
-                (0.2 * 2) + delta_s,  # 2 logs * delay + soft delta
-                (0.2 * 2) + delta_s + 0.256,  # last timeout + 256ms pad
+                (2 * delay) + delta_s,  # 2 logs * delay + soft delta
+                (2 * delay) + delta_s + TIMEOUT_PADDING_S,  # last timeout + pad
             ],
         )
 
     def test_multiple_soft_timeout(self) -> None:
-        delta_ms: int = 100
-        delta_s: float = delta_ms / 1000
+        delay: float = LOG_DELAY_S * 2
+        delta_s: float = LOG_DELAY_S
+        delta_ms: int = int(delta_s * 1000)
         self._test_timeout(
             loglevels=[logging.INFO, logging.INFO, logging.INFO],
-            delay=0.2,
+            delay=delay,
             hard_deltas={logging.INFO: 30 * 60 * 1000},
             soft_deltas={logging.INFO: delta_ms},
             # delay > soft delta, so every log will timeout
             expected_timeout_count=4,
             expected_timeout_deltas=[
                 delta_s,  # soft delta
-                0.2 + delta_s,  # delay + soft delta
-                (0.2 * 2) + delta_s,  # 2 * delay + soft delta
-                (0.2 * 2) + delta_s + 0.256,  # last timeout + 256ms pad
+                delay + delta_s,  # delay + soft delta
+                (2 * delay) + delta_s,  # 2 * delay + soft delta
+                (2 * delay) + delta_s + TIMEOUT_PADDING_S,  # last timeout + pad
             ],
         )
 
     def test_hard_timeout(self) -> None:
-        delta_ms: int = 700
-        delta_s: float = delta_ms / 1000
+        delay: float = LOG_DELAY_S
+        delta_s: float = LOG_DELAY_S * 2
+        delta_ms: int = int(delta_s * 1000)
         self._test_timeout(
             loglevels=[logging.INFO, logging.INFO, logging.INFO],
-            delay=0.2,
+            delay=delay,
             hard_deltas={logging.INFO: delta_ms},
             soft_deltas={logging.INFO: 3 * 60 * 1000},
             # delay < soft delta, so timeout push back should occur
@@ -414,21 +419,21 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
             expected_timeout_count=2,
             expected_timeout_deltas=[
                 delta_s,  # hard delta
-                delta_s + 0.256,  # last timeout + 256ms pad
+                delta_s + TIMEOUT_PADDING_S,  # last timeout + pad
             ],
         )
 
     def test_end_timeout(self) -> None:
         self._test_timeout(
             loglevels=[logging.INFO, logging.INFO, logging.INFO],
-            delay=0.2,
+            delay=LOG_DELAY_S,
             hard_deltas={logging.INFO: 30 * 60 * 1000},
             soft_deltas={logging.INFO: 3 * 60 * 1000},
             # no deltas occur
             # timeout = when close is called roughly after last log
             expected_timeout_count=1,
             expected_timeout_deltas=[
-                (0.2 * 3) + 0.256,  # last log delay + 256ms pad
+                (3 * LOG_DELAY_S) + TIMEOUT_PADDING_S,  # last log delay + pad
             ],
         )
 
