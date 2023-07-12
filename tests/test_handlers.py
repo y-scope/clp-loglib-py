@@ -50,9 +50,9 @@ register_compressor(".zst", _zstd_comppressions_handler)
 
 LOG_DIR: Path = Path("unittest-logs")
 
-ASSERT_TIMESTAMP_DELTA_S: float = 0.256
+ASSERT_TIMESTAMP_DELTA_S: float = 0.128
 LOG_DELAY_S: float = 0.064
-TIMEOUT_PADDING_S: float = 0.128
+CLOSE_TIMEOUT_PADDING_S: float = 0.256
 
 
 # TODO: revisit type ignore if minimum python version increased
@@ -383,7 +383,7 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
             expected_timeout_count=2,
             expected_timeout_deltas=[
                 (2 * delay) + delta_s,  # 2 logs * delay + soft delta
-                (2 * delay) + delta_s + TIMEOUT_PADDING_S,  # last timeout + pad
+                (2 * delay) + delta_s + CLOSE_TIMEOUT_PADDING_S,  # last timeout + pad
             ],
         )
 
@@ -402,25 +402,25 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
                 delta_s,  # soft delta
                 delay + delta_s,  # delay + soft delta
                 (2 * delay) + delta_s,  # 2 * delay + soft delta
-                (2 * delay) + delta_s + TIMEOUT_PADDING_S,  # last timeout + pad
+                (2 * delay) + delta_s + CLOSE_TIMEOUT_PADDING_S,  # last timeout + pad
             ],
         )
 
     def test_hard_timeout(self) -> None:
         delay: float = LOG_DELAY_S
-        delta_s: float = LOG_DELAY_S * 2
+        delta_s: float = LOG_DELAY_S * 4
         delta_ms: int = int(delta_s * 1000)
         self._test_timeout(
             loglevels=[logging.INFO, logging.INFO, logging.INFO],
             delay=delay,
             hard_deltas={logging.INFO: delta_ms},
             soft_deltas={logging.INFO: 3 * 60 * 1000},
-            # delay < soft delta, so timeout push back should occur
-            # timeout = final log occurrence + soft delta
+            # hard timeout triggered by first log will occur shortly after the
+            # 3rd log, no pushback occurs
             expected_timeout_count=2,
             expected_timeout_deltas=[
-                delta_s,  # hard delta
-                delta_s + TIMEOUT_PADDING_S,  # last timeout + pad
+                delta_s,  # hard delta from first log
+                delta_s + CLOSE_TIMEOUT_PADDING_S,  # last timeout + pad
             ],
         )
 
@@ -434,7 +434,7 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
             # timeout = when close is called roughly after last log
             expected_timeout_count=1,
             expected_timeout_deltas=[
-                (3 * LOG_DELAY_S) + TIMEOUT_PADDING_S,  # last log delay + pad
+                (3 * LOG_DELAY_S) + CLOSE_TIMEOUT_PADDING_S,  # last log delay + pad
             ],
         )
 
@@ -512,7 +512,7 @@ class TestCLPSockHandlerLogLevelTimeoutBase(TestCLPLogLevelTimeoutBase):
         super().close()
 
 
-class TestCLPSock_LLT(TestCLPSockHandlerLogLevelTimeoutBase):
+class TestCLPSock_LLT_ZSTD(TestCLPSockHandlerLogLevelTimeoutBase):
     # override
     def setUp(self) -> None:
         self.enable_compression = True
