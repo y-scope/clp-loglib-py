@@ -52,7 +52,7 @@ LOG_DIR: Path = Path("unittest-logs")
 
 ASSERT_TIMESTAMP_DELTA_S: float = 0.256
 LOG_DELAY_S: float = 0.064
-CLOSE_TIMEOUT_PADDING_S: float = 0.512
+TIMEOUT_PADDING_S: float = 0.512
 
 
 # TODO: revisit type ignore if minimum python version increased
@@ -146,7 +146,7 @@ class TestCLPBase(unittest.TestCase):
         self.logger.removeHandler(self.clp_handler)
         self.logger.removeHandler(self.raw_handler)
 
-    def compare_all_logs(self, test_time: bool = True, size_msg: bool = False) -> None:
+    def close_and_compare_logs(self, test_time: bool = True, size_msg: bool = False) -> None:
         self.close()
         clp_logs: List[str] = self.read_clp()
         raw_logs: List[str] = self.read_raw()
@@ -234,36 +234,36 @@ class TestCLPHandlerBase(TestCLPBase):
     def test_static(self) -> None:
         self.logger.info("static text log one")
         self.logger.info("static text log two")
-        self.compare_all_logs()
+        self.close_and_compare_logs()
 
     def test_int(self) -> None:
         self.logger.info("int 1234")
         self.logger.info("-int -1234")
-        self.compare_all_logs()
+        self.close_and_compare_logs()
 
     def test_float(self) -> None:
         self.logger.info("float 12.34")
         self.logger.info("-float -12.34")
-        self.compare_all_logs()
+        self.close_and_compare_logs()
 
     def test_dict(self) -> None:
         self.logger.info("textint test1234")
         self.logger.info("texteq=var")
         self.logger.info(f">32bit int: {2**32}")
-        self.compare_all_logs()
+        self.close_and_compare_logs()
 
     def test_combo(self) -> None:
         self.logger.info("zxcvbn 1234 asdfgh 12.34 qwerty")
         self.logger.info("zxcvbn -1234 asdfgh -12.34 qwerty")
         self.logger.info("zxcvbn foo=bar asdfgh foobar=var321 qwerty")
-        self.compare_all_logs()
+        self.close_and_compare_logs()
 
     def test_long_log(self) -> None:
         long_even_log: str = "x" * (8 * 1024 * 1024)  # 8mb
         long_odd_log: str = "x" * (8 * 1024 * 1024 - 1)
         self.logger.info(long_even_log)
         self.logger.info(long_odd_log)
-        self.compare_all_logs(test_time=False, size_msg=True)
+        self.close_and_compare_logs(test_time=False, size_msg=True)
 
 
 class TestCLPLogLevelTimeoutBase(TestCLPBase):
@@ -359,13 +359,15 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
         time.sleep(time_to_last_timeout)
 
         self.logger.log(logging.INFO, "ensure close flushes correctly")
+        self.close_and_compare_logs()
 
-        self.compare_all_logs()
+        # Delay to ensure timeout from close occurs
+        time.sleep(TIMEOUT_PADDING_S)
         self.assertEqual(timeout_count.value, expected_timeout_count)
         for i in range(expected_timeout_count):
             self.assertAlmostEqual(
-                datetime.fromtimestamp(timeout_ts[i]).timestamp(),  # type: ignore
-                datetime.fromtimestamp(start_ts + expected_timeout_deltas[i]).timestamp(),
+                timeout_ts[i],  # type: ignore
+                start_ts + expected_timeout_deltas[i],
                 delta=ASSERT_TIMESTAMP_DELTA_S,
             )
 
@@ -383,7 +385,7 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
             expected_timeout_count=2,
             expected_timeout_deltas=[
                 (2 * delay) + delta_s,  # 2 logs * delay + soft delta
-                (2 * delay) + delta_s + CLOSE_TIMEOUT_PADDING_S,  # last timeout + pad
+                (2 * delay) + delta_s + TIMEOUT_PADDING_S,  # last timeout + pad
             ],
         )
 
@@ -402,7 +404,7 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
                 delta_s,  # soft delta
                 delay + delta_s,  # delay + soft delta
                 (2 * delay) + delta_s,  # 2 * delay + soft delta
-                (2 * delay) + delta_s + CLOSE_TIMEOUT_PADDING_S,  # last timeout + pad
+                (2 * delay) + delta_s + TIMEOUT_PADDING_S,  # last timeout + pad
             ],
         )
 
@@ -420,7 +422,7 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
             expected_timeout_count=2,
             expected_timeout_deltas=[
                 delta_s,  # hard delta from first log
-                delta_s + CLOSE_TIMEOUT_PADDING_S,  # last timeout + pad
+                delta_s + TIMEOUT_PADDING_S,  # last timeout + pad
             ],
         )
 
@@ -434,7 +436,7 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
             # timeout = when close is called roughly after last log
             expected_timeout_count=1,
             expected_timeout_deltas=[
-                (3 * LOG_DELAY_S) + CLOSE_TIMEOUT_PADDING_S,  # last log delay + pad
+                (3 * LOG_DELAY_S) + TIMEOUT_PADDING_S,  # last log delay + pad
             ],
         )
 
@@ -642,7 +644,7 @@ class TestCLPSegmentStreamingBase(unittest.TestCase):
                 logs.extend([log.formatted_msg for log in logf])
         return logs
 
-    def compare_all_logs(self) -> None:
+    def close_and_compare_logs(self) -> None:
         self.close()
         self.generate_segments()
         clp_logs: List[str] = self.read_clp()
@@ -687,7 +689,7 @@ class TestCLPSegmentStreamingBase(unittest.TestCase):
             self.logger.debug("zxcvbn 1234 asdfgh 12.34 qwerty")
             self.logger.debug("zxcvbn -1234 asdfgh -12.34 qwerty")
             self.logger.debug("zxcvbn foo=bar asdfgh foobar=var321 qwerty")
-        self.compare_all_logs()
+        self.close_and_compare_logs()
 
 
 class TestCLPSegmentStreaming_ZSTD(TestCLPSegmentStreamingBase):
