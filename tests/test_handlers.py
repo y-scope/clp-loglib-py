@@ -50,9 +50,10 @@ register_compressor(".zst", _zstd_comppressions_handler)
 
 LOG_DIR: Path = Path("unittest-logs")
 
+ASSERT_TIMESTAMP_DELTA_S: float = 0.256
 LOG_DELAY_S: float = 0.064
 TIMEOUT_PADDING_S: float = 0.128
-ASSERT_TIMESTAMP_DELTA_S: float = 0.256
+
 
 # TODO: revisit type ignore if minimum python version increased
 class DtStreamHandler(logging.StreamHandler):  # type: ignore
