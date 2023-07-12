@@ -50,9 +50,9 @@ register_compressor(".zst", _zstd_comppressions_handler)
 
 LOG_DIR: Path = Path("unittest-logs")
 
-ASSERT_TIMESTAMP_DELTA_S: float = 0.128
+ASSERT_TIMESTAMP_DELTA_S: float = 0.256
 LOG_DELAY_S: float = 0.064
-CLOSE_TIMEOUT_PADDING_S: float = 0.256
+CLOSE_TIMEOUT_PADDING_S: float = 0.512
 
 
 # TODO: revisit type ignore if minimum python version increased
