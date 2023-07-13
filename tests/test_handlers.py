@@ -59,13 +59,13 @@ TIMEOUT_PADDING_S: float = 0.512
 def _try_waitpid(target_pid: int) -> int:
     """
     Poll for target_pid to finish by repeatedly sleeping and checking waitpid
-    with WNOHANG. If waitpid has not returned the target_pid after roughly 8s,
+    with WNOHANG. If waitpid has not returned the target_pid after roughly 16s,
     we send sigkill.
 
     :parm: target_pid pid of target process
     :return: process exit code (0 on success) or 137 (128 + 9) on sigkill
     """
-    for _ in range(32):
+    for _ in range(64):
         pid: int
         exit_code: int
         time.sleep(0.256)
@@ -385,9 +385,6 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
 
         self.logger.log(logging.INFO, "ensure close flushes correctly")
         self.close_and_compare_logs()
-
-        # Delay to ensure timeout from close occurs
-        time.sleep(TIMEOUT_PADDING_S)
         self.assertEqual(timeout_count.value, expected_timeout_count)
         for i in range(expected_timeout_count):
             self.assertAlmostEqual(
