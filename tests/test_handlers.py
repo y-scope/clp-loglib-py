@@ -59,7 +59,7 @@ TIMEOUT_PADDING_S: float = 0.512
 def _try_waitpid(target_pid: int) -> int:
     """
     Poll for target_pid to finish by repeatedly sleeping and checking waitpid
-    with WNOHANG. If waitpid has not returned the target_pid after roughly 16s,
+    with WNOHANG. If waitpid has not returned the target_pid after roughly 32s,
     we send sigkill.
 
     :parm: target_pid pid of target process
@@ -68,7 +68,7 @@ def _try_waitpid(target_pid: int) -> int:
     for _ in range(64):
         pid: int
         exit_code: int
-        time.sleep(0.256)
+        time.sleep(0.512)
         pid, exit_code = os.waitpid(target_pid, os.WNOHANG)
         if pid == target_pid:
             if 0 == exit_code:
