@@ -18,7 +18,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - run: |
+      - name: Install dependencies
+        run: |
           python -m pip install --upgrade pip
           pip install .[dev,test]
 
@@ -57,7 +58,8 @@ jobs:
           name: wheel-${{ matrix.python-version }}
           path: dist/
 
-      - run: |
+      - name: Install dependencies
+        run: |
           python -m pip install --upgrade pip
           pip install dist/clp_logging-*.whl
           pip install -r requirements-test.txt
@@ -95,7 +97,8 @@ jobs:
           name: wheel-3.8
           path: dist/
 
-      - run: |
+      - name: Install dependencies
+        run: |
           python -m pip install --upgrade pip
           pip install dist/clp_logging-*.whl
           pip install -r requirements-test.txt
