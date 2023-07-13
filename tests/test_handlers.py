@@ -352,7 +352,8 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
         closing the handler.
 
         :param loglevels: generate one log for each entry at given log level
-        :param log_delay: (fraction of) seconds to sleep between `logger.log` calls
+        :param log_delay: (fraction of) seconds to sleep between `logger.log`
+            calls
         :param hard_deltas: deltas in ms to initialize `CLPLogLevelTimeout`
         :param soft_deltas: deltas in ms to initialize `CLPLogLevelTimeout`
         :param expected_timeout_count: expected number of timeouts to observe

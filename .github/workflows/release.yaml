@@ -1,4 +1,4 @@
-name: Upload package to PyPi
+name: Upload package to PyPI
 
 on:
   push:
