@@ -364,6 +364,7 @@ class CLPSockListener:
             except OSError:
                 conn.close()
                 raise
+        conn.close()
         return 0
 
     @staticmethod
