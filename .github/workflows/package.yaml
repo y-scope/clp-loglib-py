@@ -20,7 +20,7 @@ jobs:
 
       - run: pip install --upgrade
           pip
-          .[dev,test]
+          .[dev]
 
       - run: docformatter --check --diff src tests
 

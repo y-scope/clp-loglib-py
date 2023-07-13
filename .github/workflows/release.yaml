@@ -1,4 +1,4 @@
-name: Upload package to pypi
+name: Upload package to PyPi
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
 jobs:
   package:
     uses: ./.github/workflows/package.yaml
+
   # https://docs.pypi.org/trusted-publishers/using-a-publisher/
   pypi-publish:
     needs: [package]
@@ -27,10 +28,12 @@ jobs:
           name: wheel-3.8
           path: dist/
 
-      - if: ${{ 'y-scope' != github.repository_owner }}
+      - name: Publish to test.pypi.org
+        if: ${{ 'y-scope' != github.repository_owner }}
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
 
-      - if: ${{ 'y-scope' == github.repository_owner }}
+      - name: Publish to pypi.org
+        if: ${{ 'y-scope' == github.repository_owner }}
         uses: pypa/gh-action-pypi-publish@release/v1

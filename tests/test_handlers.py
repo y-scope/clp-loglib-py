@@ -50,6 +50,7 @@ def _zstd_comppressions_handler(
 register_compressor(".zst", _zstd_comppressions_handler)
 
 LOG_DIR: Path = Path("unittest-logs")
+FATAL_EXIT_CODE_BASE: int = 128
 
 ASSERT_TIMESTAMP_DELTA_S: float = 0.256
 LOG_DELAY_S: float = 0.064
@@ -59,11 +60,12 @@ TIMEOUT_PADDING_S: float = 0.512
 def _try_waitpid(target_pid: int) -> int:
     """
     Poll for target_pid to finish by repeatedly sleeping and checking waitpid
-    with WNOHANG. If waitpid has not returned the target_pid after roughly 16s,
+    with WNOHANG. If waitpid has not returned the target_pid after some delay,
     we send sigkill.
 
-    :parm: target_pid pid of target process
-    :return: process exit code (0 on success) or 137 (128 + 9) on sigkill
+    :parm target_pid: pid of target process
+    :return: process exit code (0 on success) or shell fatal exit code base
+        (128) + sigkill (9) (=137)
     """
     for _ in range(64):
         pid: int
@@ -77,7 +79,7 @@ def _try_waitpid(target_pid: int) -> int:
                 return exit_code
 
     os.kill(target_pid, signal.SIGKILL)
-    return 137
+    return FATAL_EXIT_CODE_BASE + signal.SIGKILL
 
 
 # TODO: revisit type ignore if minimum python version increased
@@ -337,7 +339,7 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
     def _test_timeout(
         self,
         loglevels: List[int],
-        delay: float,
+        log_delay: float,
         hard_deltas: Dict[int, int],
         soft_deltas: Dict[int, int],
         expected_timeout_count: int,
@@ -350,7 +352,7 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
         closing the handler.
 
         :param loglevels: generate one log for each entry at given log level
-        :param delay: (fraction of) seconds to sleep between `logger.log` calls
+        :param log_delay: (fraction of) seconds to sleep between `logger.log` calls
         :param hard_deltas: deltas in ms to initialize `CLPLogLevelTimeout`
         :param soft_deltas: deltas in ms to initialize `CLPLogLevelTimeout`
         :param expected_timeout_count: expected number of timeouts to observe
@@ -376,7 +378,7 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
         start_ts: float = time.time()
         for i, loglevel in enumerate(loglevels):
             self.logger.log(loglevel, f"log{i} with loglevel={loglevel}")
-            time.sleep(delay)
+            time.sleep(log_delay)
 
         # We want sleep long enough so that the final expected timeout can
         # occur, but also ensure time.sleep recieves a non-negative number.
@@ -394,71 +396,71 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
             )
 
     def test_pushback_soft_timeout(self) -> None:
-        delay: float = LOG_DELAY_S
-        delta_s: float = delay * 2
-        delta_ms: int = int(delta_s * 1000)
+        log_delay: float = LOG_DELAY_S
+        soft_delta_s: float = log_delay * 2
+        soft_delta_ms: int = int(soft_delta_s * 1000)
         self._test_timeout(
             loglevels=[logging.INFO, logging.INFO, logging.INFO],
-            delay=delay,
+            log_delay=log_delay,
             hard_deltas={logging.INFO: 30 * 60 * 1000},
-            soft_deltas={logging.INFO: delta_ms},
-            # delay < soft delta, so timeout push back should occur
+            soft_deltas={logging.INFO: soft_delta_ms},
+            # log_delay < soft delta, so timeout push back should occur
             # timeout = final log occurrence + soft delta
             expected_timeout_count=2,
             expected_timeout_deltas=[
-                (2 * delay) + delta_s,  # 2 logs * delay + soft delta
-                (2 * delay) + delta_s + TIMEOUT_PADDING_S,  # last timeout + pad
+                (2 * log_delay) + soft_delta_s,
+                (2 * log_delay) + soft_delta_s + TIMEOUT_PADDING_S,
             ],
         )
 
     def test_multiple_soft_timeout(self) -> None:
-        delay: float = LOG_DELAY_S * 2
-        delta_s: float = LOG_DELAY_S
-        delta_ms: int = int(delta_s * 1000)
+        log_delay: float = LOG_DELAY_S * 2
+        soft_delta_s: float = LOG_DELAY_S
+        soft_delta_ms: int = int(soft_delta_s * 1000)
         self._test_timeout(
             loglevels=[logging.INFO, logging.INFO, logging.INFO],
-            delay=delay,
+            log_delay=log_delay,
             hard_deltas={logging.INFO: 30 * 60 * 1000},
-            soft_deltas={logging.INFO: delta_ms},
-            # delay > soft delta, so every log will timeout
+            soft_deltas={logging.INFO: soft_delta_ms},
+            # log_delay > soft delta, so every log will timeout
             expected_timeout_count=4,
             expected_timeout_deltas=[
-                delta_s,  # soft delta
-                delay + delta_s,  # delay + soft delta
-                (2 * delay) + delta_s,  # 2 * delay + soft delta
-                (2 * delay) + delta_s + TIMEOUT_PADDING_S,  # last timeout + pad
+                soft_delta_s,
+                log_delay + soft_delta_s,
+                (2 * log_delay) + soft_delta_s,
+                (2 * log_delay) + soft_delta_s + TIMEOUT_PADDING_S,
             ],
         )
 
     def test_hard_timeout(self) -> None:
-        delay: float = LOG_DELAY_S
-        delta_s: float = LOG_DELAY_S * 4
-        delta_ms: int = int(delta_s * 1000)
+        log_delay: float = LOG_DELAY_S
+        hard_delta_s: float = LOG_DELAY_S * 4
+        hard_delta_ms: int = int(hard_delta_s * 1000)
         self._test_timeout(
             loglevels=[logging.INFO, logging.INFO, logging.INFO],
-            delay=delay,
-            hard_deltas={logging.INFO: delta_ms},
+            log_delay=log_delay,
+            hard_deltas={logging.INFO: hard_delta_ms},
             soft_deltas={logging.INFO: 3 * 60 * 1000},
             # hard timeout triggered by first log will occur shortly after the
             # 3rd log, no pushback occurs
             expected_timeout_count=2,
             expected_timeout_deltas=[
-                delta_s,  # hard delta from first log
-                delta_s + TIMEOUT_PADDING_S,  # last timeout + pad
+                hard_delta_s,
+                hard_delta_s + TIMEOUT_PADDING_S,
             ],
         )
 
     def test_end_timeout(self) -> None:
         self._test_timeout(
             loglevels=[logging.INFO, logging.INFO, logging.INFO],
-            delay=LOG_DELAY_S,
+            log_delay=LOG_DELAY_S,
             hard_deltas={logging.INFO: 30 * 60 * 1000},
             soft_deltas={logging.INFO: 3 * 60 * 1000},
             # no deltas occur
             # timeout = when close is called roughly after last log
             expected_timeout_count=1,
             expected_timeout_deltas=[
-                (3 * LOG_DELAY_S) + TIMEOUT_PADDING_S,  # last log delay + pad
+                (3 * LOG_DELAY_S) + TIMEOUT_PADDING_S,
             ],
         )
 
