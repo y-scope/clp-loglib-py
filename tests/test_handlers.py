@@ -63,7 +63,7 @@ def _try_waitpid(target_pid: int) -> int:
     with WNOHANG. If waitpid has not returned the target_pid after some delay,
     we send sigkill.
 
-    :parm target_pid: pid of target process
+    :param target_pid: pid of target process
     :return: process exit code (0 on success) or shell fatal exit code base
         (128) + sigkill (9) (=137)
     """
