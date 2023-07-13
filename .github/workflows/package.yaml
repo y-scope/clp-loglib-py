@@ -1,0 +1,90 @@
+name: Lint, build, and test package
+
+on:
+  pull_request:
+  push:
+  workflow_call:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.11"]
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - run: pip install --upgrade
+          pip
+          .[dev]
+
+      - run: docformatter --check --diff src tests
+
+      - run: black --diff --check src/ tests/
+
+      - run: ruff check --format=github src/ tests/
+
+      - run: mypy src/ tests/
+
+      - run: python -m build
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: wheel-${{ matrix.python-version }}
+          path: dist/*
+          retention-days: 1
+
+  test:
+    needs: [build]
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        python-version: ["3.8", "3.11"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: wheel-${{ matrix.python-version }}
+          path: dist/
+
+      - run: pip install --upgrade
+          pip
+          dist/clp_logging-*.whl
+          -r requirements-test.txt
+
+      - run: python -m unittest -fv
+
+  test-py36:
+    needs: [build]
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-20.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.6"
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: wheel-3.8
+          path: dist/
+
+      - run: pip install --upgrade
+          pip
+          dist/clp_logging-*.whl
+          -r requirements-test.txt
+
+      - run: python -m unittest -fv

@@ -1,5 +1,5 @@
 import json
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 from clp_logging.protocol import (
     BYTE_ORDER,

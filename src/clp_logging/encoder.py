@@ -2,7 +2,7 @@ import json
 from math import floor
 import re
 import time
-from typing import Dict, Match, Pattern
+from typing import Match, Pattern
 
 from clp_logging.protocol import (
     BYTE_ORDER,
@@ -72,11 +72,11 @@ class CLPEncoder:
         Create the encoded CLP preamble for a stream of encoded log messages.
 
         :param timestamp: Reference timestamp used to calculate deltas emitted
-        with each message.
+            with each message.
         :param timestamp_format: Timestamp format to be use when generating the
-        logs with a reader.
+            logs with a reader.
         :param timezone: Timezone in TZID format to be use when generating the
-        timestamp from Unix epoch time.
+            timestamp from Unix epoch time.
         :raises NotImplementedError: If metadata length too large
         :return: The encoded preamble
         """
@@ -233,7 +233,7 @@ class CLPEncoder:
         Encode `token_m` appending it to `clp_msg` if it is a variable.
 
         :return: If the token was a variable returns the delimiter to append to
-        logtype, otherwise returns the static text to append to the logtype.
+            logtype, otherwise returns the static text to append to the logtype.
         """
         token: bytes = token_m.group(0)
 

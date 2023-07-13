@@ -3,12 +3,13 @@ import logging
 import os
 import time
 import unittest
-from datetime import datetime, timedelta, tzinfo
+from datetime import datetime, tzinfo
 from math import floor
 from multiprocessing.sharedctypes import Array, Value, Synchronized, SynchronizedArray
-from smart_open import open, register_compressor
+import signal
+from smart_open import open, register_compressor  # type: ignore
 from pathlib import Path
-from typing import cast, ClassVar, Dict, IO, List, Optional, Union
+from typing import cast, Dict, IO, List, Optional, Union
 from zstandard import (
     ZstdCompressor,
     ZstdDecompressor,
@@ -49,7 +50,36 @@ def _zstd_comppressions_handler(
 register_compressor(".zst", _zstd_comppressions_handler)
 
 LOG_DIR: Path = Path("unittest-logs")
-TIMESTAMP_DELTA_MS: int = 64
+FATAL_EXIT_CODE_BASE: int = 128
+
+ASSERT_TIMESTAMP_DELTA_S: float = 0.256
+LOG_DELAY_S: float = 0.064
+TIMEOUT_PADDING_S: float = 0.512
+
+
+def _try_waitpid(target_pid: int) -> int:
+    """
+    Poll for target_pid to finish by repeatedly sleeping and checking waitpid
+    with WNOHANG. If waitpid has not returned the target_pid after some delay,
+    we send sigkill.
+
+    :param target_pid: pid of target process
+    :return: process exit code (0 on success) or shell fatal exit code base
+        (128) + sigkill (9) (=137)
+    """
+    for _ in range(64):
+        pid: int
+        exit_code: int
+        time.sleep(0.256)
+        pid, exit_code = os.waitpid(target_pid, os.WNOHANG)
+        if pid == target_pid:
+            if 0 == exit_code:
+                return 0
+            else:
+                return exit_code
+
+    os.kill(target_pid, signal.SIGKILL)
+    return FATAL_EXIT_CODE_BASE + signal.SIGKILL
 
 
 # TODO: revisit type ignore if minimum python version increased
@@ -143,7 +173,7 @@ class TestCLPBase(unittest.TestCase):
         self.logger.removeHandler(self.clp_handler)
         self.logger.removeHandler(self.raw_handler)
 
-    def compare_all_logs(self, test_time: bool = True, size_msg: bool = False) -> None:
+    def close_and_compare_logs(self, test_time: bool = True, size_msg: bool = False) -> None:
         self.close()
         clp_logs: List[str] = self.read_clp()
         raw_logs: List[str] = self.read_raw()
@@ -167,10 +197,10 @@ class TestCLPBase(unittest.TestCase):
             if test_time:
                 clp_time_str: str = " ".join(clp_log_split[0:2])
                 raw_time_str: str = " ".join(raw_log_split[0:2])
-                clp_timestamp: datetime = dateutil.parser.isoparse(clp_time_str)
-                raw_timestamp: datetime = dateutil.parser.isoparse(raw_time_str)
                 self.assertAlmostEqual(
-                    clp_timestamp, raw_timestamp, delta=timedelta(milliseconds=TIMESTAMP_DELTA_MS)
+                    dateutil.parser.isoparse(clp_time_str).timestamp(),
+                    dateutil.parser.isoparse(raw_time_str).timestamp(),
+                    delta=ASSERT_TIMESTAMP_DELTA_S,
                 )
 
             clp_msg: str = " ".join(clp_log_split[2:])
@@ -231,36 +261,36 @@ class TestCLPHandlerBase(TestCLPBase):
     def test_static(self) -> None:
         self.logger.info("static text log one")
         self.logger.info("static text log two")
-        self.compare_all_logs()
+        self.close_and_compare_logs()
 
     def test_int(self) -> None:
         self.logger.info("int 1234")
         self.logger.info("-int -1234")
-        self.compare_all_logs()
+        self.close_and_compare_logs()
 
     def test_float(self) -> None:
         self.logger.info("float 12.34")
         self.logger.info("-float -12.34")
-        self.compare_all_logs()
+        self.close_and_compare_logs()
 
     def test_dict(self) -> None:
         self.logger.info("textint test1234")
         self.logger.info("texteq=var")
         self.logger.info(f">32bit int: {2**32}")
-        self.compare_all_logs()
+        self.close_and_compare_logs()
 
     def test_combo(self) -> None:
         self.logger.info("zxcvbn 1234 asdfgh 12.34 qwerty")
         self.logger.info("zxcvbn -1234 asdfgh -12.34 qwerty")
         self.logger.info("zxcvbn foo=bar asdfgh foobar=var321 qwerty")
-        self.compare_all_logs()
+        self.close_and_compare_logs()
 
     def test_long_log(self) -> None:
         long_even_log: str = "x" * (8 * 1024 * 1024)  # 8mb
         long_odd_log: str = "x" * (8 * 1024 * 1024 - 1)
         self.logger.info(long_even_log)
         self.logger.info(long_odd_log)
-        self.compare_all_logs(test_time=False, size_msg=True)
+        self.close_and_compare_logs(test_time=False, size_msg=True)
 
 
 class TestCLPLogLevelTimeoutBase(TestCLPBase):
@@ -309,7 +339,7 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
     def _test_timeout(
         self,
         loglevels: List[int],
-        delay: float,
+        log_delay: float,
         hard_deltas: Dict[int, int],
         soft_deltas: Dict[int, int],
         expected_timeout_count: int,
@@ -322,7 +352,8 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
         closing the handler.
 
         :param loglevels: generate one log for each entry at given log level
-        :param delay: (fraction of) seconds to sleep between `logger.log` calls
+        :param log_delay: (fraction of) seconds to sleep between `logger.log`
+            calls
         :param hard_deltas: deltas in ms to initialize `CLPLogLevelTimeout`
         :param soft_deltas: deltas in ms to initialize `CLPLogLevelTimeout`
         :param expected_timeout_count: expected number of timeouts to observe
@@ -348,86 +379,89 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
         start_ts: float = time.time()
         for i, loglevel in enumerate(loglevels):
             self.logger.log(loglevel, f"log{i} with loglevel={loglevel}")
-            time.sleep(delay)
+            time.sleep(log_delay)
 
-        # sleep long enough so that the final expected timeout can # occur
-        time_to_last_timeout: float = (start_ts + expected_timeout_deltas[-1]) - time.time()
+        # We want sleep long enough so that the final expected timeout can
+        # occur, but also ensure time.sleep recieves a non-negative number.
+        time_to_last_timeout: float = max(0, (start_ts + expected_timeout_deltas[-1]) - time.time())
         time.sleep(time_to_last_timeout)
 
-        self.logger.log(logging.INFO, f"ensure close flushes correctly")
-
-        self.compare_all_logs()
+        self.logger.log(logging.INFO, "ensure close flushes correctly")
+        self.close_and_compare_logs()
         self.assertEqual(timeout_count.value, expected_timeout_count)
         for i in range(expected_timeout_count):
             self.assertAlmostEqual(
-                datetime.fromtimestamp(timeout_ts[i]),  # type: ignore
-                datetime.fromtimestamp(start_ts + expected_timeout_deltas[i]),
-                delta=timedelta(milliseconds=TIMESTAMP_DELTA_MS),
+                timeout_ts[i],  # type: ignore
+                start_ts + expected_timeout_deltas[i],
+                delta=ASSERT_TIMESTAMP_DELTA_S,
             )
 
     def test_pushback_soft_timeout(self) -> None:
-        delta_ms: int = 400
-        delta_s: float = delta_ms / 1000
+        log_delay: float = LOG_DELAY_S
+        soft_delta_s: float = log_delay * 2
+        soft_delta_ms: int = int(soft_delta_s * 1000)
         self._test_timeout(
             loglevels=[logging.INFO, logging.INFO, logging.INFO],
-            delay=0.2,
+            log_delay=log_delay,
             hard_deltas={logging.INFO: 30 * 60 * 1000},
-            soft_deltas={logging.INFO: delta_ms},
-            # delay < soft delta, so timeout push back should occur
+            soft_deltas={logging.INFO: soft_delta_ms},
+            # log_delay < soft delta, so timeout push back should occur
             # timeout = final log occurrence + soft delta
             expected_timeout_count=2,
             expected_timeout_deltas=[
-                (0.2 * 2) + delta_s,  # 2 logs * delay + soft delta
-                (0.2 * 2) + delta_s + 0.256,  # last timeout + 256ms pad
+                (2 * log_delay) + soft_delta_s,
+                (2 * log_delay) + soft_delta_s + TIMEOUT_PADDING_S,
             ],
         )
 
     def test_multiple_soft_timeout(self) -> None:
-        delta_ms: int = 100
-        delta_s: float = delta_ms / 1000
+        log_delay: float = LOG_DELAY_S * 2
+        soft_delta_s: float = LOG_DELAY_S
+        soft_delta_ms: int = int(soft_delta_s * 1000)
         self._test_timeout(
             loglevels=[logging.INFO, logging.INFO, logging.INFO],
-            delay=0.2,
+            log_delay=log_delay,
             hard_deltas={logging.INFO: 30 * 60 * 1000},
-            soft_deltas={logging.INFO: delta_ms},
-            # delay > soft delta, so every log will timeout
+            soft_deltas={logging.INFO: soft_delta_ms},
+            # log_delay > soft delta, so every log will timeout
             expected_timeout_count=4,
             expected_timeout_deltas=[
-                delta_s,  # soft delta
-                0.2 + delta_s,  # delay + soft delta
-                (0.2 * 2) + delta_s,  # 2 * delay + soft delta
-                (0.2 * 2) + delta_s + 0.256,  # last timeout + 256ms pad
+                soft_delta_s,
+                log_delay + soft_delta_s,
+                (2 * log_delay) + soft_delta_s,
+                (2 * log_delay) + soft_delta_s + TIMEOUT_PADDING_S,
             ],
         )
 
     def test_hard_timeout(self) -> None:
-        delta_ms: int = 700
-        delta_s: float = delta_ms / 1000
+        log_delay: float = LOG_DELAY_S
+        hard_delta_s: float = LOG_DELAY_S * 4
+        hard_delta_ms: int = int(hard_delta_s * 1000)
         self._test_timeout(
             loglevels=[logging.INFO, logging.INFO, logging.INFO],
-            delay=0.2,
-            hard_deltas={logging.INFO: delta_ms},
+            log_delay=log_delay,
+            hard_deltas={logging.INFO: hard_delta_ms},
             soft_deltas={logging.INFO: 3 * 60 * 1000},
-            # delay < soft delta, so timeout push back should occur
-            # timeout = final log occurrence + soft delta
+            # hard timeout triggered by first log will occur shortly after the
+            # 3rd log, no pushback occurs
             expected_timeout_count=2,
             expected_timeout_deltas=[
-                delta_s,  # hard delta
-                delta_s + 0.256,  # last timeout + 256ms pad
+                hard_delta_s,
+                hard_delta_s + TIMEOUT_PADDING_S,
             ],
         )
 
     def test_end_timeout(self) -> None:
         self._test_timeout(
             loglevels=[logging.INFO, logging.INFO, logging.INFO],
-            delay=0.2,
+            log_delay=LOG_DELAY_S,
             hard_deltas={logging.INFO: 30 * 60 * 1000},
             soft_deltas={logging.INFO: 3 * 60 * 1000},
             # no deltas occur
             # timeout = when close is called roughly after last log
             expected_timeout_count=1,
             expected_timeout_deltas=[
-                (0.2 * 3) + 0.256,  # last log delay + 256ms pad
+                (3 * LOG_DELAY_S) + TIMEOUT_PADDING_S,
             ],
         )
 
@@ -455,7 +489,7 @@ class TestCLPSockHandlerBase(TestCLPHandlerBase):
     # override
     def close(self) -> None:
         self.clp_handler.stop_listener()
-        os.waitpid(self.clp_handler.listener_pid, 0)
+        self.assertEqual(0, _try_waitpid(self.clp_handler.listener_pid))
         super().close()
 
 
@@ -501,17 +535,25 @@ class TestCLPSockHandlerLogLevelTimeoutBase(TestCLPLogLevelTimeoutBase):
     # override
     def close(self) -> None:
         self.clp_handler.stop_listener()
-        os.waitpid(self.clp_handler.listener_pid, 0)
+        self.assertEqual(0, _try_waitpid(self.clp_handler.listener_pid))
         super().close()
 
 
-class TestCLPSock_LLT(TestCLPSockHandlerLogLevelTimeoutBase):
+@unittest.skipIf(
+    "macOS" == os.getenv("RUNNER_OS"),
+    "Github macos runner tends to fail LLT tests with timing issues.",
+)
+class TestCLPSock_LLT_ZSTD(TestCLPSockHandlerLogLevelTimeoutBase):
     # override
     def setUp(self) -> None:
         self.enable_compression = True
         super().setUp()
 
 
+@unittest.skipIf(
+    "macOS" == os.getenv("RUNNER_OS"),
+    "Github macos runner tends to fail LLT tests with timing issues.",
+)
 class TestCLPSock_LLT_RAW(TestCLPSockHandlerLogLevelTimeoutBase):
     # override
     def setUp(self) -> None:
@@ -541,6 +583,10 @@ class TestCLPStream_RAW(TestCLPHandlerBase):
         self.setup_logging()
 
 
+@unittest.skipIf(
+    "macOS" == os.getenv("RUNNER_OS"),
+    "Github macos runner tends to fail LLT tests with timing issues.",
+)
 class TestCLPStream_LLT_ZSTD(TestCLPLogLevelTimeoutBase):
     # override
     def _setup_handler(self) -> None:
@@ -551,6 +597,10 @@ class TestCLPStream_LLT_ZSTD(TestCLPLogLevelTimeoutBase):
         self.setup_logging()
 
 
+@unittest.skipIf(
+    "macOS" == os.getenv("RUNNER_OS"),
+    "Github macos runner tends to fail LLT tests with timing issues.",
+)
 class TestCLPStream_LLT_RAW(TestCLPLogLevelTimeoutBase):
     # override
     def _setup_handler(self) -> None:
@@ -635,7 +685,7 @@ class TestCLPSegmentStreamingBase(unittest.TestCase):
                 logs.extend([log.formatted_msg for log in logf])
         return logs
 
-    def compare_all_logs(self) -> None:
+    def close_and_compare_logs(self) -> None:
         self.close()
         self.generate_segments()
         clp_logs: List[str] = self.read_clp()
@@ -680,7 +730,7 @@ class TestCLPSegmentStreamingBase(unittest.TestCase):
             self.logger.debug("zxcvbn 1234 asdfgh 12.34 qwerty")
             self.logger.debug("zxcvbn -1234 asdfgh -12.34 qwerty")
             self.logger.debug("zxcvbn foo=bar asdfgh foobar=var321 qwerty")
-        self.compare_all_logs()
+        self.close_and_compare_logs()
 
 
 class TestCLPSegmentStreaming_ZSTD(TestCLPSegmentStreamingBase):

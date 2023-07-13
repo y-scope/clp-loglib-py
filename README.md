@@ -198,32 +198,33 @@ logging.getLogger(__name__).addHandler(clp_handler)
 
 ## Compatibility
 
-Tested on Python 3.6 and 3.8 and should work on any newer version.
+Tested on Python 3.6, 3.8, and 3.11 (should also work on newer versions).
 Built/packaged on Python 3.8 for convenience regarding type annotation.
 
-## Building/Packaging
+## Development
+
+### Setup environment
 
 1. Create and enter a virtual environment:
    `python3.8 -m venv venv; . ./venv/bin/activate`
-2. Install development dependencies:
-   `pip install -r requirements-dev.txt`
-3. Build:
+2. Install the project in editable mode, the development dependencies, and the test dependencies:
+   `pip install -e .[dev,test]`
+
+Note: you may need to upgrade pip first for `-e` to work. If so, run: `pip install --upgrade pip`
+
+### Packaging
+
+To build a package for distribution run:
    `python -m build`
 
-## Testing
+### Testing
 
-Note the baseline comparison logging handler and the CLP handler both get
+To run the unit tests run:
+   `python -m unittest -bv`
+
+Note: the baseline comparison logging handler and the CLP handler both get
 unique timestamps. It is possible for these timestamps to differ, which will
 result in a test reporting a false positive error.
-
-1. Create and enter a virtual environment:
-   `python -m venv venv; .  ./venv/bin/activate`
-2. Install development dependencies:
-   `pip install -r requirements-dev.txt`
-3. Install:
-   `pip install dist/clp_logging-*-py3-none-any.whl` or `pip install -e .`
-4. Run unittest:
-   `python -m unittest -bv`
 
 ## Contributing
 
@@ -239,6 +240,9 @@ formatting tools (found in [requirements-dev.txt](requirements-dev.txt)):
 * [Black][6]: `black src tests`
   * This formats the code according to Black's code-style rules. You should
     review and add any changes to your PR.
+* [ruff][8]: `ruff check --fix src tests`
+  * This performs linting according to PEPs. You should review and add any
+    changes to your PR.
 
 Note that `docformatter` should be run before `black` to give Black the [last
 word][7].
@@ -251,3 +255,4 @@ word][7].
 [5]: https://docformatter.readthedocs.io/en/latest/
 [6]: https://black.readthedocs.io/en/stable/index.html
 [7]: https://docformatter.readthedocs.io/en/latest/faq.html#interaction-with-black
+[8]: https://beta.ruff.rs/docs/

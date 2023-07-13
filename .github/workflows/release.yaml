@@ -1,0 +1,39 @@
+name: Upload package to PyPI
+
+on:
+  push:
+    tags:
+      - v*
+
+jobs:
+  package:
+    uses: ./.github/workflows/package.yaml
+
+  # https://docs.pypi.org/trusted-publishers/using-a-publisher/
+  pypi-publish:
+    needs: [package]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.8"
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: wheel-3.8
+          path: dist/
+
+      - name: Publish to test.pypi.org
+        if: ${{ 'y-scope' != github.repository_owner }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+      - name: Publish to pypi.org
+        if: ${{ 'y-scope' == github.repository_owner }}
+        uses: pypa/gh-action-pypi-publish@release/v1
