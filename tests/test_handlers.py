@@ -536,6 +536,10 @@ class TestCLPSockHandlerLogLevelTimeoutBase(TestCLPLogLevelTimeoutBase):
         super().close()
 
 
+@unittest.skipIf(
+    "macOS" == os.getenv("RUNNER_OS"),
+    "Github macos runner tends to fail LLT tests with timing issues.",
+)
 class TestCLPSock_LLT_ZSTD(TestCLPSockHandlerLogLevelTimeoutBase):
     # override
     def setUp(self) -> None:
@@ -543,6 +547,10 @@ class TestCLPSock_LLT_ZSTD(TestCLPSockHandlerLogLevelTimeoutBase):
         super().setUp()
 
 
+@unittest.skipIf(
+    "macOS" == os.getenv("RUNNER_OS"),
+    "Github macos runner tends to fail LLT tests with timing issues.",
+)
 class TestCLPSock_LLT_RAW(TestCLPSockHandlerLogLevelTimeoutBase):
     # override
     def setUp(self) -> None:
@@ -572,6 +580,10 @@ class TestCLPStream_RAW(TestCLPHandlerBase):
         self.setup_logging()
 
 
+@unittest.skipIf(
+    "macOS" == os.getenv("RUNNER_OS"),
+    "Github macos runner tends to fail LLT tests with timing issues.",
+)
 class TestCLPStream_LLT_ZSTD(TestCLPLogLevelTimeoutBase):
     # override
     def _setup_handler(self) -> None:
@@ -582,6 +594,10 @@ class TestCLPStream_LLT_ZSTD(TestCLPLogLevelTimeoutBase):
         self.setup_logging()
 
 
+@unittest.skipIf(
+    "macOS" == os.getenv("RUNNER_OS"),
+    "Github macos runner tends to fail LLT tests with timing issues.",
+)
 class TestCLPStream_LLT_RAW(TestCLPLogLevelTimeoutBase):
     # override
     def _setup_handler(self) -> None:

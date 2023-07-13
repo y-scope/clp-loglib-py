@@ -18,10 +18,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install .[dev,test]
+      - run: pip install --upgrade
+          pip
+          .[dev,test]
 
       - run: docformatter --check --diff src tests
 
@@ -58,26 +57,12 @@ jobs:
           name: wheel-${{ matrix.python-version }}
           path: dist/
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install dist/clp_logging-*.whl
-          pip install -r requirements-test.txt
+      - run: pip install --upgrade
+          pip
+          dist/clp_logging-*.whl
+          -r requirements-test.txt
 
-      - name: Run unit tests (all)
-        if: ${{ 'macos-latest' != matrix.os }}
-        run: python -m unittest -fv
-
-      - name: Run unit tests (skip log level timeout)
-        if: ${{ 'macos-latest' == matrix.os }}
-        run: >
-            python -m unittest -fv
-            tests.test_handlers.TestCLPSock_ZSTD
-            tests.test_handlers.TestCLPSock_RAW
-            tests.test_handlers.TestCLPStream_ZSTD
-            tests.test_handlers.TestCLPStream_RAW
-            tests.test_handlers.TestCLPSegmentStreaming_ZSTD
-            tests.test_handlers.TestCLPSegmentStreaming_RAW
+      - run: python -m unittest -fv
 
   test-py36:
     needs: [build]
@@ -97,23 +82,9 @@ jobs:
           name: wheel-3.8
           path: dist/
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install dist/clp_logging-*.whl
-          pip install -r requirements-test.txt
+      - run: pip install --upgrade
+          pip
+          dist/clp_logging-*.whl
+          -r requirements-test.txt
 
-      - name: Run unit tests (all)
-        if: ${{ 'macos-latest' != matrix.os }}
-        run: python -m unittest -fv
-
-      - name: Run unit tests (skip log level timeout)
-        if: ${{ 'macos-latest' == matrix.os }}
-        run: >
-            python -m unittest -fv
-            tests.test_handlers.TestCLPSock_ZSTD
-            tests.test_handlers.TestCLPSock_RAW
-            tests.test_handlers.TestCLPStream_ZSTD
-            tests.test_handlers.TestCLPStream_RAW
-            tests.test_handlers.TestCLPSegmentStreaming_ZSTD
-            tests.test_handlers.TestCLPSegmentStreaming_RAW
+      - run: python -m unittest -fv
