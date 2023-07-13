@@ -18,28 +18,21 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies
-        run: |
+      - run: |
           python -m pip install --upgrade pip
           pip install .[dev,test]
 
-      - name: docformatter
-        run: docformatter --check --diff src tests
+      - run: docformatter --check --diff src tests
 
-      - name: black
-        run: black --diff --check src/ tests/
+      - run: black --diff --check src/ tests/
 
-      - name: ruff
-        run: ruff check --format=github src/ tests/
+      - run: ruff check --format=github src/ tests/
 
-      - name: mypy
-        run: mypy src/ tests/
+      - run: mypy src/ tests/
 
-      - name: Build
-        run: python -m build
+      - run: python -m build
 
-      - name: Upload wheel file
-        uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v3
         with:
           name: wheel-${{ matrix.python-version }}
           path: dist/*
@@ -64,8 +57,7 @@ jobs:
           name: wheel-${{ matrix.python-version }}
           path: dist/
 
-      - name: Install dependencies
-        run: |
+      - run: |
           python -m pip install --upgrade pip
           pip install dist/clp_logging-*.whl
           pip install -r requirements-test.txt
@@ -103,8 +95,7 @@ jobs:
           name: wheel-3.8
           path: dist/
 
-      - name: Install dependencies
-        run: |
+      - run: |
           python -m pip install --upgrade pip
           pip install dist/clp_logging-*.whl
           pip install -r requirements-test.txt
