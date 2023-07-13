@@ -6,6 +6,7 @@ import unittest
 from datetime import datetime, tzinfo
 from math import floor
 from multiprocessing.sharedctypes import Array, Value, Synchronized, SynchronizedArray
+import signal
 from smart_open import open, register_compressor  # type: ignore
 from pathlib import Path
 from typing import cast, Dict, IO, List, Optional, Union
@@ -53,6 +54,30 @@ LOG_DIR: Path = Path("unittest-logs")
 ASSERT_TIMESTAMP_DELTA_S: float = 0.256
 LOG_DELAY_S: float = 0.064
 TIMEOUT_PADDING_S: float = 0.512
+
+
+def _try_waitpid(target_pid: int) -> int:
+    """
+    Poll for target_pid to finish by repeatedly sleeping and checking waitpid
+    with WNOHANG. If waitpid has not returned the target_pid after 3 tries, we
+    send sigkill.
+
+    :parm: target_pid pid of target process
+    :return: process exit code (0 on success) or 137 (128 + 9) on sigkill
+    """
+    for _ in range(8):
+        pid: int
+        exit_code: int
+        time.sleep(0.256)
+        pid, exit_code = os.waitpid(target_pid, os.WNOHANG)
+        if pid == target_pid:
+            if 0 == exit_code:
+                return 0
+            else:
+                return exit_code
+
+    os.kill(target_pid, signal.SIGKILL)
+    return 137
 
 
 # TODO: revisit type ignore if minimum python version increased
@@ -464,7 +489,7 @@ class TestCLPSockHandlerBase(TestCLPHandlerBase):
     # override
     def close(self) -> None:
         self.clp_handler.stop_listener()
-        os.waitpid(self.clp_handler.listener_pid, 0)
+        self.assertEqual(0, _try_waitpid(self.clp_handler.listener_pid))
         super().close()
 
 
@@ -510,7 +535,7 @@ class TestCLPSockHandlerLogLevelTimeoutBase(TestCLPLogLevelTimeoutBase):
     # override
     def close(self) -> None:
         self.clp_handler.stop_listener()
-        os.waitpid(self.clp_handler.listener_pid, 0)
+        self.assertEqual(0, _try_waitpid(self.clp_handler.listener_pid))
         super().close()
 
 
