@@ -417,7 +417,9 @@ class CLPSockListener:
                 last_timestamp_ms = timestamp_ms
                 ostream.write(buf)
 
-            ostream.write(FourByteEncoder.encode_preamble(last_timestamp_ms, timestamp_format, timezone))
+            ostream.write(
+                FourByteEncoder.encode_preamble(last_timestamp_ms, timestamp_format, timezone)
+            )
             while not CLPSockListener._signaled:
                 msg: bytes
                 try:
@@ -428,7 +430,9 @@ class CLPSockListener:
                     break
                 buf: bytearray = bytearray(msg)
                 timestamp_ms: int = floor(time.time() * 1000)
-                timestamp_buf: bytearray = FourByteEncoder.encode_timestamp_delta(timestamp_ms - last_timestamp_ms)
+                timestamp_buf: bytearray = FourByteEncoder.encode_timestamp_delta(
+                    timestamp_ms - last_timestamp_ms
+                )
                 last_timestamp_ms = timestamp_ms
                 if loglevel_timeout:
                     loglevel_timeout.update(loglevel, last_timestamp_ms, log_fn)
@@ -686,7 +690,9 @@ class CLPStreamHandler(CLPBaseHandler):
         )
         self.last_timestamp_ms: int = floor(time.time() * 1000)  # convert to ms and truncate
         self.ostream.write(
-            FourByteEncoder.encode_preamble(self.last_timestamp_ms, self.timestamp_format, self.timezone)
+            FourByteEncoder.encode_preamble(
+                self.last_timestamp_ms, self.timestamp_format, self.timezone
+            )
         )
 
     def __init__(
