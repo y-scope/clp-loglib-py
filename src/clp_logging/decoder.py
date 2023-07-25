@@ -10,7 +10,6 @@ from clp_logging.protocol import (
     ID_TIMESTAMP,
     ID_VAR,
     MAGIC_NUMBER_COMPACT_ENCODING,
-    Metadata,
     METADATA_JSON_ENCODING,
     METADATA_LEN_UBYTE,
     METADATA_LEN_USHORT,
@@ -18,6 +17,7 @@ from clp_logging.protocol import (
     SIZEOF_BYTE,
     SIZEOF_SHORT,
     VAR_COMPACT_ENCODING,
+    Metadata,
 )
 
 

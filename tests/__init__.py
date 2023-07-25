@@ -1,7 +1,7 @@
+import unittest
 from typing import Iterable, Optional, Union
 
 from tests.test_handlers import TestCLPBase, TestCLPSegmentStreamingBase
-import unittest
 
 
 def add_tests(suite: unittest.TestSuite, loader: unittest.TestLoader, test_class: type) -> None:

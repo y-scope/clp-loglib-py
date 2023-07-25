@@ -1,22 +1,21 @@
-from abc import ABCMeta, abstractmethod
 import logging
 import os
+import socket
+import sys
 import time
+from abc import ABCMeta, abstractmethod
 from datetime import tzinfo
 from math import floor
 from pathlib import Path
 from queue import Empty, Queue
-from signal import signal, SIGINT, SIGTERM
-import socket
+from signal import SIGINT, SIGTERM, signal
 from threading import Thread, Timer
-import sys
 from types import FrameType
-from typing import Callable, ClassVar, Dict, IO, Optional, Tuple, Union
+from typing import IO, Callable, ClassVar, Dict, Optional, Tuple, Union
 
 import dateutil.tz
-from zstandard import FLUSH_FRAME, ZstdCompressor, ZstdCompressionWriter
-
 from clp_ffi_py.ir import FourByteEncoder
+from zstandard import FLUSH_FRAME, ZstdCompressionWriter, ZstdCompressor
 
 from clp_logging.protocol import (
     BYTE_ORDER,

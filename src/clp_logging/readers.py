@@ -1,14 +1,13 @@
 from abc import ABCMeta, abstractmethod
 from datetime import datetime, tzinfo
 from pathlib import Path
+from sys import stderr
 from types import TracebackType
 from typing import IO, Iterator, List, Match, Optional, Tuple, Type, Union
 
 import dateutil.tz
-from sys import stderr
-from zstandard import ZstdDecompressor, ZstdDecompressionReader
-
 from clp_ffi_py.ir import FourByteEncoder
+from zstandard import ZstdDecompressionReader, ZstdDecompressor
 
 from clp_logging.decoder import CLPDecoder
 from clp_logging.protocol import (
@@ -22,14 +21,14 @@ from clp_logging.protocol import (
     ID_MASK,
     ID_TIMESTAMP,
     ID_VAR,
-    Metadata,
     METADATA_REFERENCE_TIMESTAMP_KEY,
     METADATA_TIMESTAMP_PATTERN_KEY,
     METADATA_TZ_ID_KEY,
+    RE_DELIM_VAR,
     RE_DELIM_VAR_UNESCAPE,
     RE_SUB_DELIM_VAR_UNESCAPE,
     VAR_COMPACT_ENCODING,
-    RE_DELIM_VAR,
+    Metadata,
 )
 
 

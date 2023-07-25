@@ -58,6 +58,7 @@ pretty = true
 
 [tool.ruff]
 line-length = 100
+select = ["E", "I", "F"]
 src = ["src"]
 
 [tool.setuptools_scm]
