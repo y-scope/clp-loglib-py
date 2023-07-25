@@ -8,7 +8,7 @@ import dateutil.tz
 from sys import stderr
 from zstandard import ZstdDecompressor, ZstdDecompressionReader
 
-from clp_ffi_py.CLPFourByteEncoder import encode_preamble
+from clp_ffi_py.ir import FourByteEncoder
 
 from clp_logging.decoder import CLPDecoder
 from clp_logging.protocol import (
@@ -517,7 +517,7 @@ class _CLPSegmentStreamingReader:
                     raise
         if self.metadata:
             self.last_timestamp_ms = int(self.metadata[METADATA_REFERENCE_TIMESTAMP_KEY])
-            preamble: bytearray = encode_preamble(
+            preamble: bytearray = FourByteEncoder.encode_preamble(
                 self.last_timestamp_ms,
                 self.metadata[METADATA_TIMESTAMP_PATTERN_KEY],
                 self.metadata[METADATA_TZ_ID_KEY],
