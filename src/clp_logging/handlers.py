@@ -8,10 +8,10 @@ from datetime import tzinfo
 from math import floor
 from pathlib import Path
 from queue import Empty, Queue
-from signal import SIGINT, SIGTERM, signal
+from signal import SIGINT, signal, SIGTERM
 from threading import Thread, Timer
 from types import FrameType
-from typing import IO, Callable, ClassVar, Dict, Optional, Tuple, Union
+from typing import Callable, ClassVar, Dict, IO, Optional, Tuple, Union
 
 import dateutil.tz
 from clp_ffi_py.ir import FourByteEncoder

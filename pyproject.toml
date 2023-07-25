@@ -61,4 +61,7 @@ line-length = 100
 select = ["E", "I", "F"]
 src = ["src"]
 
+[tool.ruff.isort]
+order-by-type = false
+
 [tool.setuptools_scm]

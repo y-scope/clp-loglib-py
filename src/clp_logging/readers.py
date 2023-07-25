@@ -21,6 +21,7 @@ from clp_logging.protocol import (
     ID_MASK,
     ID_TIMESTAMP,
     ID_VAR,
+    Metadata,
     METADATA_REFERENCE_TIMESTAMP_KEY,
     METADATA_TIMESTAMP_PATTERN_KEY,
     METADATA_TZ_ID_KEY,
@@ -28,7 +29,6 @@ from clp_logging.protocol import (
     RE_DELIM_VAR_UNESCAPE,
     RE_SUB_DELIM_VAR_UNESCAPE,
     VAR_COMPACT_ENCODING,
-    Metadata,
 )
 
 

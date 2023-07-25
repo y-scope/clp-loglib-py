@@ -8,7 +8,7 @@ from datetime import datetime, tzinfo
 from math import floor
 from multiprocessing.sharedctypes import Array, Synchronized, SynchronizedArray, Value
 from pathlib import Path
-from typing import IO, Dict, List, Optional, Union, cast
+from typing import cast, Dict, IO, List, Optional, Union
 
 import dateutil.parser
 from smart_open import open, register_compressor  # type: ignore
@@ -20,13 +20,13 @@ from zstandard import (
 )
 
 from clp_logging.handlers import (
-    DEFAULT_LOG_FORMAT,
-    WARN_PREFIX,
     CLPBaseHandler,
     CLPFileHandler,
     CLPLogLevelTimeout,
     CLPSockHandler,
     CLPStreamHandler,
+    DEFAULT_LOG_FORMAT,
+    WARN_PREFIX,
 )
 from clp_logging.protocol import Metadata
 from clp_logging.readers import CLPFileReader, CLPSegmentStreaming
