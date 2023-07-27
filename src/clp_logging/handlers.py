@@ -68,17 +68,18 @@ def _init_timeinfo(fmt: Optional[str], tz: Optional[str]) -> Tuple[str, str]:
     return fmt, tz
 
 
-def _encode_log_event(msg: str, ref_timestamp_ms: int) -> Tuple[bytearray, int]:
+def _encode_log_event(msg: str, last_timestamp_ms: int) -> Tuple[bytearray, int]:
     """
     Encodes the log event with the input log message and reference timestamp.
 
     :param msg: Input log message.
-    :param ref_timestamp_ms: Input reference timestamp.
+    :param last_timestamp_ms: The timestamp of the last log event. Will be used
+        to calculate the timestamp delta.
     :return: A tuple of the encoded log event and the associated timestamp.
     """
     timestamp_ms: int = floor(time.time() * 1000)
     clp_msg: bytearray = FourByteEncoder.encode_message_and_timestamp_delta(
-        timestamp_ms - ref_timestamp_ms, (msg + "\n").encode()
+        timestamp_ms - last_timestamp_ms, (msg + "\n").encode()
     )
     return clp_msg, timestamp_ms
 
