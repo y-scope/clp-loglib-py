@@ -68,6 +68,21 @@ def _init_timeinfo(fmt: Optional[str], tz: Optional[str]) -> Tuple[str, str]:
     return fmt, tz
 
 
+def _encode_log_event(msg: str, ref_timestamp_ms: int) -> Tuple[bytearray, int]:
+    """
+    Encodes the log event with the input log message and reference timestamp.
+
+    :param msg: Input log message.
+    :param ref_timestamp_ms: Input reference timestamp.
+    :return: A tuple of the encoded log event and the associated timestamp.
+    """
+    timestamp_ms: int = floor(time.time() * 1000)
+    clp_msg: bytearray = FourByteEncoder.encode_message_and_timestamp_delta(
+        timestamp_ms - ref_timestamp_ms, (msg + "\n").encode()
+    )
+    return clp_msg, timestamp_ms
+
+
 class CLPBaseHandler(logging.Handler, metaclass=ABCMeta):
     def __init__(self) -> None:
         super().__init__()
@@ -409,11 +424,8 @@ class CLPSockListener:
 
             def log_fn(msg: str) -> None:
                 nonlocal last_timestamp_ms
-                timestamp_ms: int = floor(time.time() * 1000)  # convert to ms and truncate
-                buf: bytearray = FourByteEncoder.encode_message_and_timestamp_delta(
-                    timestamp_ms - last_timestamp_ms, (msg + "\n").encode()
-                )
-                last_timestamp_ms = timestamp_ms
+                buf: bytearray
+                buf, last_timestamp_ms = _encode_log_event(msg, last_timestamp_ms)
                 ostream.write(buf)
 
             ostream.write(
@@ -717,24 +729,19 @@ class CLPStreamHandler(CLPBaseHandler):
             loglevel_timeout.set_ostream(self.ostream)
         self.loglevel_timeout = loglevel_timeout
 
-    def _encode_log_event(self, msg: str) -> bytearray:
-        timestamp_ms: int = floor(time.time() * 1000)
-        clp_msg: bytearray = FourByteEncoder.encode_message_and_timestamp_delta(
-            timestamp_ms - self.last_timestamp_ms, (msg + "\n").encode()
-        )
-        self.last_timestamp_ms = timestamp_ms
-        return clp_msg
-
     def _direct_write(self, msg: str) -> None:
         if self.closed:
             raise RuntimeError("Stream already closed")
-        self.ostream.write(self._encode_log_event(msg))
+        clp_msg: bytearray
+        clp_msg, self.last_timestamp_ms = _encode_log_event(msg, self.last_timestamp_ms)
+        self.ostream.write(clp_msg)
 
     # override
     def _write(self, loglevel: int, msg: str) -> None:
         if self.closed:
             raise RuntimeError("Stream already closed")
-        clp_msg: bytearray = self._encode_log_event(msg)
+        clp_msg: bytearray
+        clp_msg, self.last_timestamp_ms = _encode_log_event(msg, self.last_timestamp_ms)
         if self.loglevel_timeout:
             self.loglevel_timeout.update(loglevel, self.last_timestamp_ms, self._direct_write)
         self.ostream.write(clp_msg)
