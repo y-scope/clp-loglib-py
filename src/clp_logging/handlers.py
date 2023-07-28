@@ -79,7 +79,7 @@ def _encode_log_event(msg: str, last_timestamp_ms: int) -> Tuple[bytearray, int]
     """
     timestamp_ms: int = floor(time.time() * 1000)
     clp_msg: bytearray = FourByteEncoder.encode_message_and_timestamp_delta(
-        timestamp_ms - last_timestamp_ms, (msg + "\n").encode()
+        timestamp_ms - last_timestamp_ms, msg.encode()
     )
     return clp_msg, timestamp_ms
 
@@ -122,7 +122,7 @@ class CLPBaseHandler(logging.Handler, metaclass=ABCMeta):
         self.formatter = fmt
 
     def _warn(self, msg: str) -> None:
-        self._write(logging.WARN, f"{WARN_PREFIX} {msg}")
+        self._write(logging.WARN, f"{WARN_PREFIX} {msg}\n")
 
     @abstractmethod
     def _write(self, loglevel: int, msg: str) -> None:
@@ -135,7 +135,7 @@ class CLPBaseHandler(logging.Handler, metaclass=ABCMeta):
         `logging.Handler.handleError` is always called and avoid requiring a
         `logging.LogRecord` to call internal writing functions.
         """
-        msg: str = self.format(record)
+        msg: str = self.format(record) + "\n"
         try:
             self._write(record.levelno, msg)
         except Exception:
@@ -261,7 +261,7 @@ class CLPLogLevelTimeout:
         if loglevel not in self.hard_timeout_deltas:
             log_fn(
                 f"{WARN_PREFIX} log level {loglevel} not in self.hard_timeout_deltas; defaulting"
-                " to _HARD_TIMEOUT_DELTAS[logging.INFO]."
+                " to _HARD_TIMEOUT_DELTAS[logging.INFO].\n"
             )
             hard_timeout_delta = CLPLogLevelTimeout._HARD_TIMEOUT_DELTAS[logging.INFO]
         else:
@@ -280,7 +280,7 @@ class CLPLogLevelTimeout:
         if loglevel not in self.soft_timeout_deltas:
             log_fn(
                 f"{WARN_PREFIX} log level {loglevel} not in self.soft_timeout_deltas; defaulting"
-                " to _SOFT_TIMEOUT_DELTAS[logging.INFO]."
+                " to _SOFT_TIMEOUT_DELTAS[logging.INFO].\n"
             )
             soft_timeout_delta = CLPLogLevelTimeout._SOFT_TIMEOUT_DELTAS[logging.INFO]
         else:
@@ -644,7 +644,7 @@ class CLPSockHandler(CLPBaseHandler):
         try:
             if self.closed:
                 raise RuntimeError("Socket already closed")
-            clp_msg: bytearray = FourByteEncoder.encode_message((msg + "\n").encode())
+            clp_msg: bytearray = FourByteEncoder.encode_message(msg.encode())
             size: int = len(clp_msg)
             if size > UINT_MAX:
                 raise NotImplementedError(
