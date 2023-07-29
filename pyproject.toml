@@ -13,6 +13,7 @@ description = "Logging/encoding/decoding using CLP's IR stream format"
 readme = "README.md"
 requires-python = ">=3.6"
 dependencies = [
+    "clp-ffi-py >= 0.0.1",
     "python-dateutil >= 2.7.0",
     "typing-extensions >= 3.7.4",
     "zstandard >= 0.18.0",
@@ -57,6 +58,10 @@ pretty = true
 
 [tool.ruff]
 line-length = 100
+select = ["E", "I", "F"]
 src = ["src"]
+
+[tool.ruff.isort]
+order-by-type = false
 
 [tool.setuptools_scm]

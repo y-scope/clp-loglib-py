@@ -1,23 +1,23 @@
-from ctypes import c_double, c_int
 import logging
 import os
+import signal
 import time
 import unittest
+from ctypes import c_double, c_int
 from datetime import datetime, tzinfo
 from math import floor
-from multiprocessing.sharedctypes import Array, Value, Synchronized, SynchronizedArray
-import signal
-from smart_open import open, register_compressor  # type: ignore
+from multiprocessing.sharedctypes import Array, Synchronized, SynchronizedArray, Value
 from pathlib import Path
 from typing import cast, Dict, IO, List, Optional, Union
-from zstandard import (
-    ZstdCompressor,
-    ZstdDecompressor,
-    ZstdCompressionWriter,
-    ZstdDecompressionReader,
-)
 
 import dateutil.parser
+from smart_open import open, register_compressor  # type: ignore
+from zstandard import (
+    ZstdCompressionWriter,
+    ZstdCompressor,
+    ZstdDecompressionReader,
+    ZstdDecompressor,
+)
 
 from clp_logging.handlers import (
     CLPBaseHandler,
@@ -29,8 +29,7 @@ from clp_logging.handlers import (
     WARN_PREFIX,
 )
 from clp_logging.protocol import Metadata
-from clp_logging.readers import CLPFileReader
-from clp_logging.readers import CLPSegmentStreaming
+from clp_logging.readers import CLPFileReader, CLPSegmentStreaming
 
 
 def _zstd_comppressions_handler(

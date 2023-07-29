@@ -38,8 +38,8 @@ class CLPDecoder:
     @staticmethod
     def decode_float(token: bytes) -> Tuple[float, str]:
         """
-        See `CLPEncoder.encode_float` for detailed breakdown of CLP float
-        encoding.
+        See the clp_ffi_py repo and CLP core repo for detailed breakdown of CLP
+        float encoding.
 
         :return: Tuple of `float` and `str` value of token
         """

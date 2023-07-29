@@ -1,5 +1,6 @@
 import re
 from typing import Dict, Pattern, Tuple
+
 from typing_extensions import Final, Literal
 
 # Type sizing to be portable

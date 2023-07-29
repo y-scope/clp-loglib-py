@@ -1,15 +1,15 @@
 from abc import ABCMeta, abstractmethod
 from datetime import datetime, tzinfo
 from pathlib import Path
+from sys import stderr
 from types import TracebackType
 from typing import IO, Iterator, List, Match, Optional, Tuple, Type, Union
 
 import dateutil.tz
-from sys import stderr
-from zstandard import ZstdDecompressor, ZstdDecompressionReader
+from clp_ffi_py.ir import FourByteEncoder
+from zstandard import ZstdDecompressionReader, ZstdDecompressor
 
 from clp_logging.decoder import CLPDecoder
-from clp_logging.encoder import CLPEncoder
 from clp_logging.protocol import (
     BYTE_ORDER,
     DELIM_DICT,
@@ -25,10 +25,10 @@ from clp_logging.protocol import (
     METADATA_REFERENCE_TIMESTAMP_KEY,
     METADATA_TIMESTAMP_PATTERN_KEY,
     METADATA_TZ_ID_KEY,
+    RE_DELIM_VAR,
     RE_DELIM_VAR_UNESCAPE,
     RE_SUB_DELIM_VAR_UNESCAPE,
     VAR_COMPACT_ENCODING,
-    RE_DELIM_VAR,
 )
 
 
@@ -516,7 +516,7 @@ class _CLPSegmentStreamingReader:
                     raise
         if self.metadata:
             self.last_timestamp_ms = int(self.metadata[METADATA_REFERENCE_TIMESTAMP_KEY])
-            preamble: bytearray = CLPEncoder.emit_preamble(
+            preamble: bytearray = FourByteEncoder.encode_preamble(
                 self.last_timestamp_ms,
                 self.metadata[METADATA_TIMESTAMP_PATTERN_KEY],
                 self.metadata[METADATA_TZ_ID_KEY],

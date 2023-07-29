@@ -1,22 +1,22 @@
-from abc import ABCMeta, abstractmethod
 import logging
 import os
+import socket
+import sys
 import time
+from abc import ABCMeta, abstractmethod
 from datetime import tzinfo
 from math import floor
 from pathlib import Path
 from queue import Empty, Queue
-from signal import signal, SIGINT, SIGTERM
-import socket
+from signal import SIGINT, signal, SIGTERM
 from threading import Thread, Timer
-import sys
 from types import FrameType
 from typing import Callable, ClassVar, Dict, IO, Optional, Tuple, Union
 
 import dateutil.tz
-from zstandard import FLUSH_FRAME, ZstdCompressor, ZstdCompressionWriter
+from clp_ffi_py.ir import FourByteEncoder
+from zstandard import FLUSH_FRAME, ZstdCompressionWriter, ZstdCompressor
 
-from clp_logging.encoder import CLPEncoder
 from clp_logging.protocol import (
     BYTE_ORDER,
     EOF_CHAR,
@@ -68,6 +68,22 @@ def _init_timeinfo(fmt: Optional[str], tz: Optional[str]) -> Tuple[str, str]:
     return fmt, tz
 
 
+def _encode_log_event(msg: str, last_timestamp_ms: int) -> Tuple[bytearray, int]:
+    """
+    Encodes the log event with the input log message and reference timestamp.
+
+    :param msg: Input log message.
+    :param last_timestamp_ms: The timestamp of the last log event. Will be used
+        to calculate the timestamp delta.
+    :return: A tuple of the encoded log event and the associated timestamp.
+    """
+    timestamp_ms: int = floor(time.time() * 1000)
+    clp_msg: bytearray = FourByteEncoder.encode_message_and_timestamp_delta(
+        timestamp_ms - last_timestamp_ms, msg.encode()
+    )
+    return clp_msg, timestamp_ms
+
+
 class CLPBaseHandler(logging.Handler, metaclass=ABCMeta):
     def __init__(self) -> None:
         super().__init__()
@@ -106,7 +122,7 @@ class CLPBaseHandler(logging.Handler, metaclass=ABCMeta):
         self.formatter = fmt
 
     def _warn(self, msg: str) -> None:
-        self._write(logging.WARN, f"{WARN_PREFIX} {msg}")
+        self._write(logging.WARN, f"{WARN_PREFIX} {msg}\n")
 
     @abstractmethod
     def _write(self, loglevel: int, msg: str) -> None:
@@ -119,7 +135,7 @@ class CLPBaseHandler(logging.Handler, metaclass=ABCMeta):
         `logging.Handler.handleError` is always called and avoid requiring a
         `logging.LogRecord` to call internal writing functions.
         """
-        msg: str = self.format(record)
+        msg: str = self.format(record) + "\n"
         try:
             self._write(record.levelno, msg)
         except Exception:
@@ -245,7 +261,7 @@ class CLPLogLevelTimeout:
         if loglevel not in self.hard_timeout_deltas:
             log_fn(
                 f"{WARN_PREFIX} log level {loglevel} not in self.hard_timeout_deltas; defaulting"
-                " to _HARD_TIMEOUT_DELTAS[logging.INFO]."
+                " to _HARD_TIMEOUT_DELTAS[logging.INFO].\n"
             )
             hard_timeout_delta = CLPLogLevelTimeout._HARD_TIMEOUT_DELTAS[logging.INFO]
         else:
@@ -264,7 +280,7 @@ class CLPLogLevelTimeout:
         if loglevel not in self.soft_timeout_deltas:
             log_fn(
                 f"{WARN_PREFIX} log level {loglevel} not in self.soft_timeout_deltas; defaulting"
-                " to _SOFT_TIMEOUT_DELTAS[logging.INFO]."
+                " to _SOFT_TIMEOUT_DELTAS[logging.INFO].\n"
             )
             soft_timeout_delta = CLPLogLevelTimeout._SOFT_TIMEOUT_DELTAS[logging.INFO]
         else:
@@ -409,11 +425,13 @@ class CLPSockListener:
 
             def log_fn(msg: str) -> None:
                 nonlocal last_timestamp_ms
-                buf: bytearray = bytearray(CLPEncoder.encode_message(msg.encode()))
-                last_timestamp_ms = CLPEncoder.encode_timestamp(last_timestamp_ms, buf)
+                buf: bytearray
+                buf, last_timestamp_ms = _encode_log_event(msg, last_timestamp_ms)
                 ostream.write(buf)
 
-            ostream.write(CLPEncoder.emit_preamble(last_timestamp_ms, timestamp_format, timezone))
+            ostream.write(
+                FourByteEncoder.encode_preamble(last_timestamp_ms, timestamp_format, timezone)
+            )
             while not CLPSockListener._signaled:
                 msg: bytes
                 try:
@@ -423,9 +441,14 @@ class CLPSockListener:
                 if msg == EOF_CHAR:
                     break
                 buf: bytearray = bytearray(msg)
-                last_timestamp_ms = CLPEncoder.encode_timestamp(last_timestamp_ms, buf)
+                timestamp_ms: int = floor(time.time() * 1000)
+                timestamp_buf: bytearray = FourByteEncoder.encode_timestamp_delta(
+                    timestamp_ms - last_timestamp_ms
+                )
+                last_timestamp_ms = timestamp_ms
                 if loglevel_timeout:
                     loglevel_timeout.update(loglevel, last_timestamp_ms, log_fn)
+                buf += timestamp_buf
                 ostream.write(buf)
             if loglevel_timeout:
                 loglevel_timeout.timeout()
@@ -621,7 +644,7 @@ class CLPSockHandler(CLPBaseHandler):
         try:
             if self.closed:
                 raise RuntimeError("Socket already closed")
-            clp_msg: bytearray = CLPEncoder.encode_message(msg.encode())
+            clp_msg: bytearray = FourByteEncoder.encode_message(msg.encode())
             size: int = len(clp_msg)
             if size > UINT_MAX:
                 raise NotImplementedError(
@@ -679,7 +702,9 @@ class CLPStreamHandler(CLPBaseHandler):
         )
         self.last_timestamp_ms: int = floor(time.time() * 1000)  # convert to ms and truncate
         self.ostream.write(
-            CLPEncoder.emit_preamble(self.last_timestamp_ms, self.timestamp_format, self.timezone)
+            FourByteEncoder.encode_preamble(
+                self.last_timestamp_ms, self.timestamp_format, self.timezone
+            )
         )
 
     def __init__(
@@ -708,16 +733,16 @@ class CLPStreamHandler(CLPBaseHandler):
     def _direct_write(self, msg: str) -> None:
         if self.closed:
             raise RuntimeError("Stream already closed")
-        clp_msg: bytearray = CLPEncoder.encode_message(msg.encode())
-        self.last_timestamp_ms = CLPEncoder.encode_timestamp(self.last_timestamp_ms, clp_msg)
+        clp_msg: bytearray
+        clp_msg, self.last_timestamp_ms = _encode_log_event(msg, self.last_timestamp_ms)
         self.ostream.write(clp_msg)
 
     # override
     def _write(self, loglevel: int, msg: str) -> None:
         if self.closed:
             raise RuntimeError("Stream already closed")
-        clp_msg: bytearray = CLPEncoder.encode_message(msg.encode())
-        self.last_timestamp_ms = CLPEncoder.encode_timestamp(self.last_timestamp_ms, clp_msg)
+        clp_msg: bytearray
+        clp_msg, self.last_timestamp_ms = _encode_log_event(msg, self.last_timestamp_ms)
         if self.loglevel_timeout:
             self.loglevel_timeout.update(loglevel, self.last_timestamp_ms, self._direct_write)
         self.ostream.write(clp_msg)
