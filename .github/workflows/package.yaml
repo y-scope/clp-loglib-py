@@ -26,7 +26,7 @@ jobs:
 
       - run: black --diff --check src/ tests/
 
-      - run: ruff check --format=github src/ tests/
+      - run: ruff check --output-format=github src/ tests/
 
       - run: mypy src/ tests/
 
