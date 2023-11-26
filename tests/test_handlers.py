@@ -237,25 +237,25 @@ class TestCLPHandlerBase(TestCLPBase):
         self.clp_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
         self.raw_handler.setFormatter(logging.Formatter(" [%(levelname)s] %(message)s"))
         self.logger.info("format starts with %(asctime)s")
-        self.assert_clp_logs(
-            [f"{WARN_PREFIX.lstrip()} replacing '%(asctime)s' with clp_logging timestamp format"]
-        )
+        self.assert_clp_logs([
+            f"{WARN_PREFIX.lstrip()} replacing '%(asctime)s' with clp_logging timestamp format"
+        ])
 
     def test_time_format_in_middle(self) -> None:
         fmt: str = "[%(levelname)s] %(asctime)s %(message)s"
         self.clp_handler.setFormatter(logging.Formatter(fmt))
         self.logger.info("format has %(asctime)s in the middle")
-        self.assert_clp_logs(
-            [f"{WARN_PREFIX.lstrip()} replacing '{fmt}' with '{DEFAULT_LOG_FORMAT}'"]
-        )
+        self.assert_clp_logs([
+            f"{WARN_PREFIX.lstrip()} replacing '{fmt}' with '{DEFAULT_LOG_FORMAT}'"
+        ])
 
     def test_time_format_missing(self) -> None:
         self.clp_handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
         self.raw_handler.setFormatter(logging.Formatter(" [%(levelname)s] %(message)s"))
         self.logger.info("no asctime in format")
-        self.assert_clp_logs(
-            [f"{WARN_PREFIX.lstrip()} prepending clp_logging timestamp to formatter"]
-        )
+        self.assert_clp_logs([
+            f"{WARN_PREFIX.lstrip()} prepending clp_logging timestamp to formatter"
+        ])
 
     def test_static(self) -> None:
         self.logger.info("static text log one")
@@ -322,18 +322,16 @@ class TestCLPLogLevelTimeoutBase(TestCLPBase):
         self._setup_handler()
 
         self.logger.debug("debug log0")
-        self.assert_clp_logs(
-            [
-                (
-                    f"{WARN_PREFIX.lstrip()} log level {logging.DEBUG} not in"
-                    " self.hard_timeout_deltas; defaulting to _HARD_TIMEOUT_DELTAS[logging.INFO]."
-                ),
-                (
-                    f"{WARN_PREFIX.lstrip()} log level {logging.DEBUG} not in"
-                    " self.soft_timeout_deltas; defaulting to _SOFT_TIMEOUT_DELTAS[logging.INFO]."
-                ),
-            ]
-        )
+        self.assert_clp_logs([
+            (
+                f"{WARN_PREFIX.lstrip()} log level {logging.DEBUG} not in"
+                " self.hard_timeout_deltas; defaulting to _HARD_TIMEOUT_DELTAS[logging.INFO]."
+            ),
+            (
+                f"{WARN_PREFIX.lstrip()} log level {logging.DEBUG} not in"
+                " self.soft_timeout_deltas; defaulting to _SOFT_TIMEOUT_DELTAS[logging.INFO]."
+            ),
+        ])
 
     def _test_timeout(
         self,
