@@ -10,7 +10,7 @@ to the detailed explanation in this [Uber's blog][1].
 
 ## Motivation
 
-CLP buffers a substantial volume of log files before executing compression for enhanced compression
+CLP buffers a substantial volume of log files before executing compression for a better compression
 ratio. However, most individual log files are actively opened for appending over an extended
 duration. In their raw-text format, these log files are not space-efficient and do not support
 efficient querying through standard text-based tools like `grep`.
