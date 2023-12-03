@@ -2,11 +2,10 @@
 
 This is a Python `logging` library meant to supplement [CLP (Compressed Log Processor)][0].
 It operates by serializing and compressing log events using the CLP Intermediate Representation (IR)
-format before saving them in persistent storage, achieving both data streaming capability and
-effective compression ratios. Log files serialized using IR format can be viewed using
-[YScope Log Viewer][2]. They can also be deserialized to their original plain-text format, or
-programmatically analyzed with the APIs provided by [clp-ffi-py][9]. For further information, refer
-to the detailed explanation in this [Uber's blog][1].
+format, achieving both data streaming capability and effective compression ratios. Log files
+serialized using IR format can be viewed using [YScope Log Viewer][2]. They can also be deserialized
+to their original plain-text format, or programmatically analyzed with the APIs provided by
+[clp-ffi-py][9]. For further information, refer to the detailed explanation in this [Uber blog][1].
 
 ## Motivation
 
@@ -97,6 +96,11 @@ CLPSockHandler(Path("example.clp.zst")).stop_listener()
 ```
 
 ## CLP readers (decoders)
+
+Important Update: The readers currently available in this library are scheduled for deprecation in
+the upcoming release. To access our newest and improved CLP IR readers, which offer advanced
+features like high-performance decoding and enhanced query search capabilities, please install
+[clp-ffi-py][9].
 
 ### CLPStreamReader
 
