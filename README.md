@@ -97,10 +97,10 @@ CLPSockHandler(Path("example.clp.zst")).stop_listener()
 
 ## CLP readers (decoders)
 
-Important Update: The readers currently available in this library are scheduled for deprecation in
-the upcoming release. To access our newest and improved CLP IR readers, which offer advanced
-features like high-performance decoding and enhanced query search capabilities, please install
-[clp-ffi-py][9].
+Important Update: The readers and all the other non-logging APIs currently available in this library
+are scheduled for deprecation in the upcoming release. To access our newest and improved CLP IR
+analytic interface, which offers advanced features like high-performance decoding and enhanced query
+search capabilities, please check and install [clp-ffi-py][9].
 
 ### CLPStreamReader
 
