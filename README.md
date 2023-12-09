@@ -15,8 +15,8 @@ duration. In their raw-text format, these log files are not space-efficient and 
 efficient querying through standard text-based tools like `grep`.
 
 To address this problem, this logging library is designed to serialize log events directly in CLP's
-Intermediate Representation (IR) format. A log event created with a CLP logging handler will be
-first encoded into the IR format, and then appended to a compressed output stream. This approach not
+Intermediate Representation (IR) format. A log event created with a CLP logging handler will first
+be encoded into the IR format, and then appended to a compressed output stream. This approach not
 only minimizes storage resource consumption but also facilitates the execution of high-performance,
 early-stage analytics using the APIs from [clp-ffi-py][9]. These compressed CLP IR files can be
 further processed by CLP to achieve superior compression ratios and more extensive analytics
@@ -98,9 +98,9 @@ CLPSockHandler(Path("example.clp.zst")).stop_listener()
 ## CLP readers (decoders)
 
 Important Update: The readers and all the other non-logging APIs currently available in this library
-are scheduled for deprecation in the upcoming release. To access our newest and improved CLP IR
-analytic interface, which offers advanced features like high-performance decoding and enhanced query
-search capabilities, please check and install [clp-ffi-py][9].
+are scheduled for deprecation in an upcoming release. To access our newest and improved CLP IR
+analytics interface (which offers advanced features like high-performance decoding and enhanced query
+search capabilities) check out [clp-ffi-py][9].
 
 ### CLPStreamReader
 
