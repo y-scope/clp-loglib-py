@@ -1,24 +1,28 @@
 # CLP Python Logging Library
 
 This is a Python `logging` library meant to supplement [CLP (Compressed Log Processor)][0].
-Logs are compressed in a streaming fashion into CLP's Internal Representation (IR) format before written to disk.
-More details are described in this [Uber's blog][1].
+It operates by serializing and compressing log events using the CLP Intermediate Representation (IR)
+format, achieving both data streaming capabilities and effective compression ratios. Log files
+serialized using the IR format can be viewed using the [YScope Log Viewer][2]. They can also be deserialized
+to their original plain-text format, or programmatically analyzed with the APIs provided by
+[clp-ffi-py][9]. For further information, refer to the detailed explanation in this [Uber blog][1].
 
-Logs compressed in IR format can be viewed in a [log viewer][2] or programmatically analyzed using
-APIs provided here. They can also be decompressed back into plain-text log files using [CLP][0] (in a future release).
+## Motivation
 
-To achieve the best compression ratio, CLP should be used to compress large
-batches of logs, one batch at a time. However, individual log
-files are generally small and are generated across a long period of time.
+CLP buffers a substantial volume of log files before executing compression for a better compression
+ratio. However, most individual log files are actively opened for appending over an extended
+duration. In their raw-text format, these log files are not space-efficient and do not support
+efficient querying through standard text-based tools like `grep`.
 
-This logging library helps solve this problem by logging directly in CLP's
-Internal Representation (IR). A log created with a CLP logging handler is first
-parsed and then appended to a compressed output stream in IR form.
-See [README-protocol.md](README-protocol.md) for more details on the format of
-CLP IR.
+To address this problem, this logging library is designed to serialize log events directly in CLP's
+Intermediate Representation (IR) format. A log event created with a CLP logging handler will first
+be encoded into the IR format, and then appended to a compressed output stream. This approach not
+only minimizes storage resource consumption but also facilitates the execution of high-performance,
+early-stage analytics using the APIs from [clp-ffi-py][9]. These compressed CLP IR files can be
+further processed by CLP to achieve superior compression ratios and more extensive analytics
+capabilities.
 
-These log files containing the compressed CLP IR streams can then all be
-ingested into CLP together at a later time.
+For a detailed understanding of the CLP IR format, refer to [README-protocol.md](README-protocol.md)
 
 ## Quick Start
 
@@ -92,6 +96,12 @@ CLPSockHandler(Path("example.clp.zst")).stop_listener()
 ```
 
 ## CLP readers (decoders)
+
+> [!WARNING]
+> The readers and all the other non-logging APIs currently available in this library are scheduled
+> for deprecation in an upcoming release. To access our newest and improved CLP IR analytics
+> interface (which offers advanced features like high-performance decoding and enhanced query search
+> capabilities) check out [clp-ffi-py][9].
 
 ### CLPStreamReader
 
@@ -256,3 +266,4 @@ word][7].
 [6]: https://black.readthedocs.io/en/stable/index.html
 [7]: https://docformatter.readthedocs.io/en/latest/faq.html#interaction-with-black
 [8]: https://beta.ruff.rs/docs/
+[9]: https://github.com/y-scope/clp-ffi-py
