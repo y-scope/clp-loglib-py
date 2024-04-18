@@ -24,11 +24,11 @@ classifiers = [
 
 [project.optional-dependencies]
 dev = [
-    "black >= 23.11.0",
+    "black >= 24.4.0",
     "build >= 0.8.0",
-    "docformatter >= 1.5.1",
-    "mypy >= 0.982",
-    "ruff >= 0.1.5",
+    "docformatter >= 1.7.5",
+    "mypy >= 1.9.0",
+    "ruff >= 0.3.7",
     "types-python-dateutil >= 2.8.19.2",
 ]
 test = [
@@ -58,10 +58,10 @@ pretty = true
 
 [tool.ruff]
 line-length = 100
-select = ["E", "I", "F"]
 src = ["src"]
 
-[tool.ruff.isort]
-order-by-type = false
+[tool.ruff.lint]
+isort.order-by-type = false
+select = ["E", "I", "F"]
 
 [tool.setuptools_scm]
