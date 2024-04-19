@@ -24,6 +24,9 @@ capabilities.
 
 For a detailed understanding of the CLP IR format, refer to [README-protocol.md](README-protocol.md)
 
+> [!IMPORTANT]
+> This project is no longer built for Python3.6.
+
 ## Quick Start
 
 The package is hosted with pypi (https://pypi.org/project/clp-logging/), so it
@@ -208,7 +211,7 @@ logging.getLogger(__name__).addHandler(clp_handler)
 
 ## Compatibility
 
-Tested on Python 3.6, 3.8, and 3.11 (should also work on newer versions).
+Tested on Python 3.8 and 3.11 (should also work on newer versions).
 Built/packaged on Python 3.8 for convenience regarding type annotation.
 
 ## Development
