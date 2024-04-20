@@ -31,9 +31,11 @@ from clp_logging.protocol import (
 )
 
 try:
-    from zoneinfo import ZoneInfo
+    from zoneinfo import ZoneInfo  # type: ignore[import-not-found, unused-ignore]
 except ImportError:
-    from backports.zoneinfo import ZoneInfo
+    from backports.zoneinfo import (  # type: ignore[import-not-found, no-redef, unused-ignore]
+        ZoneInfo,
+    )
 
 
 class Log:
