@@ -55,12 +55,12 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: wheel-${{ matrix.python-version }}
-          path: .
+          path: dist/
 
       - run: pip install --upgrade
           pip
-          clp_logging-*.whl
+          dist/clp_logging-*.whl
           -r requirements-test.txt
-        shell: cmd
+        shell: bash
 
       - run: python -m unittest -fv
