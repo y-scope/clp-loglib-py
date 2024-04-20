@@ -4,7 +4,6 @@ import socket
 import sys
 import time
 from abc import ABCMeta, abstractmethod
-from datetime import tzinfo
 from math import floor
 from pathlib import Path
 from queue import Empty, Queue

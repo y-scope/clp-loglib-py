@@ -4,7 +4,6 @@ from pathlib import Path
 from sys import stderr
 from types import TracebackType
 from typing import IO, Iterator, List, Match, Optional, Tuple, Type, Union
-from zoneinfo import ZoneInfo
 
 from clp_ffi_py.ir import FourByteEncoder
 from zstandard import ZstdDecompressionReader, ZstdDecompressor
@@ -31,6 +30,10 @@ from clp_logging.protocol import (
     VAR_COMPACT_ENCODING,
 )
 
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
 
 class Log:
     """
