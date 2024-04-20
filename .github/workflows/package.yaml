@@ -59,7 +59,7 @@ jobs:
 
       - run: pip install --upgrade
           pip
-          dist\clp_logging-*.whl
+          /d dist\clp_logging-*.whl
           -r requirements-test.txt
 
       - run: python -m unittest -fv
