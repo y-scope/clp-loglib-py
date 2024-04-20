@@ -13,7 +13,7 @@ from threading import Thread, Timer
 from types import FrameType
 from typing import Callable, ClassVar, Dict, IO, Optional, Tuple, Union
 
-import dateutil.tz
+import tzlocal
 from clp_ffi_py.ir import FourByteEncoder
 from zstandard import FLUSH_FRAME, ZstdCompressionWriter, ZstdCompressor
 
@@ -59,12 +59,8 @@ def _init_timeinfo(fmt: Optional[str], tz: Optional[str]) -> Tuple[str, str]:
     if not fmt:
         fmt = "yyyy-MM-d H:m:s.A"
     if not tz:
-        tzf: Optional[tzinfo] = dateutil.tz.gettz()
-        if tzf:
-            tzp: Path = Path.resolve(Path(tzf._filename))  # type: ignore
-            tz = "/".join([tzp.parent.name, tzp.name])
-        else:
-            tz = "UTC"
+        tz = tzlocal.get_localzone_name()
+
     return fmt, tz
 
 

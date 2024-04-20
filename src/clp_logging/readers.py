@@ -4,8 +4,8 @@ from pathlib import Path
 from sys import stderr
 from types import TracebackType
 from typing import IO, Iterator, List, Match, Optional, Tuple, Type, Union
+from zoneinfo import ZoneInfo
 
-import dateutil.tz
 from clp_ffi_py.ir import FourByteEncoder
 from zstandard import ZstdDecompressionReader, ZstdDecompressor
 
@@ -186,7 +186,7 @@ class CLPBaseReader(metaclass=ABCMeta):
             # We do not use the timestamp pattern from the preamble as it may
             # be from other languages and therefore incompatible.
             # self.timestamp_format = self.metadata[METADATA_TIMESTAMP_PATTERN_KEY]
-            self.timezone = dateutil.tz.gettz(self.metadata[METADATA_TZ_ID_KEY])
+            self.timezone = ZoneInfo(self.metadata[METADATA_TZ_ID_KEY])
         return self.pos
 
     @abstractmethod
