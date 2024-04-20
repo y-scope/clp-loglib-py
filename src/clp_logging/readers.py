@@ -35,6 +35,7 @@ try:
 except ImportError:
     from backports.zoneinfo import ZoneInfo
 
+
 class Log:
     """
     An object representing a `logging` record. It is created and returned by
