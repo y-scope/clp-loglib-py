@@ -56,10 +56,11 @@ jobs:
         with:
           name: wheel-${{ matrix.python-version }}
           path: dist/
+          shell: cmd
 
       - run: pip install --upgrade
           pip
-          /d dist\clp_logging-*.whl
+          dist\clp_logging-*.whl
           -r requirements-test.txt
 
       - run: python -m unittest -fv
