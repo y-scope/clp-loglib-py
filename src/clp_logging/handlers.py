@@ -58,7 +58,10 @@ def _init_timeinfo(fmt: Optional[str], tz: Optional[str]) -> Tuple[str, str]:
     if not fmt:
         fmt = "yyyy-MM-d H:m:s.A"
     if not tz:
-        tz = tzlocal.get_localzone_name()
+        try:
+            tz = tzlocal.get_localzone_name()
+        except Exception:
+            tz = "UTC"
 
     return fmt, tz
 
