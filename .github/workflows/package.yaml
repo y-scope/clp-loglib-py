@@ -54,9 +54,7 @@ jobs:
 
       - uses: actions/download-artifact@v3
         with:
-          name: >-
-            ${{ '3.7' == matrix.python-version' && 'wheel-3.8' || 
-            format('wheel-{0}', matrix.python-version) }}
+          name: ${{ '3.7' == matrix.python-version' && 'wheel-3.8' || format('wheel-{0}', matrix.python-version) }}
           path: dist/
 
       - run: pip install --upgrade
