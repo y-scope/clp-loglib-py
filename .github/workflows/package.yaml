@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.7", "3.8", "3.11"]
+        python-version: ["3.8", "3.11"]
     steps:
       - uses: actions/checkout@v3
 
@@ -43,7 +43,7 @@ jobs:
     strategy:
       matrix:
         os: [macos-latest, ubuntu-latest]
-        python-version: ["3.8", "3.11"]
+        python-version: ["3.7", "3.8", "3.11"]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
@@ -54,7 +54,9 @@ jobs:
 
       - uses: actions/download-artifact@v3
         with:
-          name: wheel-${{ matrix.python-version }}
+          name: >-
+            ${{ matrix.python-version == '3.7' && 'wheel-3.8' || 
+            'wheel-' + matrix.python-version }}
           path: dist/
 
       - run: pip install --upgrade
