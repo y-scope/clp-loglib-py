@@ -208,7 +208,7 @@ logging.getLogger(__name__).addHandler(clp_handler)
 
 ## Compatibility
 
-Tested on Python 3.6, 3.8, and 3.11 (should also work on newer versions).
+Tested on Python 3.7, 3.8, and 3.11 (should also work on newer versions).
 Built/packaged on Python 3.8 for convenience regarding type annotation.
 
 ## Development
