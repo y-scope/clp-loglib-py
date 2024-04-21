@@ -52,11 +52,18 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - uses: actions/download-artifact@v3
+      - name: Download wheels for Python3.7
+        if: ${{ '3.7' == matrix.python-version }}
+        uses: actions/download-artifact@v3
         with:
-          name: >-
-            ${{ matrix.python-version == '3.7' && 'wheel-3.8' ||
-             format('wheel-{0}', matrix.python-version) }}
+          name: wheel-3.8
+          path: dist/
+
+      - name: Download wheels for Built Python Versions
+        if: ${{ '3.7' != matrix.python-version }}
+        uses: actions/download-artifact@v3
+        with:
+          name: wheel-${{ matrix.python-version }}
           path: dist/
 
       - run: pip install --upgrade
