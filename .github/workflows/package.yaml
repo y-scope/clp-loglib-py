@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.8", "3.11"]
+        python-version: ["3.7", "3.8", "3.11"]
     steps:
       - uses: actions/checkout@v3
 
@@ -55,31 +55,6 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: wheel-${{ matrix.python-version }}
-          path: dist/
-
-      - run: pip install --upgrade
-          pip
-          dist/clp_logging-*.whl
-          -r requirements-test.txt
-
-      - run: python -m unittest -fv
-
-  test-py37:
-    needs: [build]
-    strategy:
-      matrix:
-        os: [macos-latest, ubuntu-20.04]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v3
-
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "3.7"
-
-      - uses: actions/download-artifact@v3
-        with:
-          name: wheel-3.8
           path: dist/
 
       - run: pip install --upgrade
