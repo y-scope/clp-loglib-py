@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from datetime import datetime, tzinfo
+from datetime import datetime
 from pathlib import Path
 from sys import stderr
 from types import TracebackType
@@ -67,7 +67,7 @@ class Log:
     def __str__(self) -> str:
         return self.formatted_msg
 
-    def _decode(self, timestamp_format: Optional[str], timezone: Optional[tzinfo]) -> int:
+    def _decode(self, timestamp_format: Optional[str], timezone: Optional[ZoneInfo]) -> int:
         """
         Populate the `variables`, `msg`, and `formatted_msg` fields by decoding
         the encoded `encoded_logtype and `encoded_variables`.
@@ -154,7 +154,7 @@ class CLPBaseReader(metaclass=ABCMeta):
         self.metadata: Optional[Metadata] = None
         self.last_timestamp_ms: int
         self.timestamp_format: Optional[str] = timestamp_format
-        self.timezone: Optional[tzinfo]
+        self.timezone: Optional[ZoneInfo]
         self.pos: int
 
     def read_preamble(self) -> int:
