@@ -16,7 +16,8 @@ dependencies = [
     "backports.zoneinfo >= 0.2.1; python_version < '3.9'",
     "clp-ffi-py >= 0.0.9",
     "typing-extensions >= 3.7.4",
-    "tzlocal >= 5.2",
+    "tzlocal == 5.1; python_version < '3.8'",
+    "tzlocal >= 5.2; python_version >= '3.8'",
     "zstandard >= 0.18.0",
 ]
 classifiers = [
