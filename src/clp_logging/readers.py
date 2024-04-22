@@ -1,11 +1,10 @@
 from abc import ABCMeta, abstractmethod
-from datetime import datetime, tzinfo
+from datetime import datetime
 from pathlib import Path
 from sys import stderr
 from types import TracebackType
 from typing import IO, Iterator, List, Match, Optional, Tuple, Type, Union
 
-import dateutil.tz
 from clp_ffi_py.ir import FourByteEncoder
 from zstandard import ZstdDecompressionReader, ZstdDecompressor
 
@@ -30,6 +29,13 @@ from clp_logging.protocol import (
     RE_SUB_DELIM_VAR_UNESCAPE,
     VAR_COMPACT_ENCODING,
 )
+
+try:
+    from zoneinfo import ZoneInfo  # type: ignore[import-not-found, unused-ignore]
+except ImportError:
+    from backports.zoneinfo import (  # type: ignore[import-not-found, no-redef, unused-ignore]
+        ZoneInfo,
+    )
 
 
 class Log:
@@ -61,7 +67,7 @@ class Log:
     def __str__(self) -> str:
         return self.formatted_msg
 
-    def _decode(self, timestamp_format: Optional[str], timezone: Optional[tzinfo]) -> int:
+    def _decode(self, timestamp_format: Optional[str], timezone: Optional[ZoneInfo]) -> int:
         """
         Populate the `variables`, `msg`, and `formatted_msg` fields by decoding
         the encoded `encoded_logtype and `encoded_variables`.
@@ -148,7 +154,7 @@ class CLPBaseReader(metaclass=ABCMeta):
         self.metadata: Optional[Metadata] = None
         self.last_timestamp_ms: int
         self.timestamp_format: Optional[str] = timestamp_format
-        self.timezone: Optional[tzinfo]
+        self.timezone: Optional[ZoneInfo]
         self.pos: int
 
     def read_preamble(self) -> int:
@@ -186,7 +192,7 @@ class CLPBaseReader(metaclass=ABCMeta):
             # We do not use the timestamp pattern from the preamble as it may
             # be from other languages and therefore incompatible.
             # self.timestamp_format = self.metadata[METADATA_TIMESTAMP_PATTERN_KEY]
-            self.timezone = dateutil.tz.gettz(self.metadata[METADATA_TZ_ID_KEY])
+            self.timezone = ZoneInfo(self.metadata[METADATA_TZ_ID_KEY])
         return self.pos
 
     @abstractmethod
