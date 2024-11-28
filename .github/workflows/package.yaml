@@ -38,12 +38,12 @@ jobs:
           path: dist/*
           retention-days: 1
 
-  test-python3.7:
+  test-python37:
     needs: [build]
     strategy:
       matrix:
         os: [macos-13, ubuntu-latest]
-        python-version: "3.7"
+        python-version: ["3.7"]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
