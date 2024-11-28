@@ -55,6 +55,7 @@ jobs:
       - name: Download wheels for Python3.7
         uses: actions/download-artifact@v3
         with:
+          # Since we don't build for Python 3.7, we download the Python 3.8 wheel instead
           name: wheel-3.8
           path: dist/
 
