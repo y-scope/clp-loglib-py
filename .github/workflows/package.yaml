@@ -58,12 +58,6 @@ jobs:
           name: wheel-3.8
           path: dist/
 
-      - name: Download wheels for Built Python Versions
-        uses: actions/download-artifact@v3
-        with:
-          name: wheel-3.8
-          path: dist/
-
       - run: pip install --upgrade
           pip
           dist/clp_logging-*.whl
