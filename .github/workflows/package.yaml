@@ -38,6 +38,34 @@ jobs:
           path: dist/*
           retention-days: 1
 
+  test-python37:
+    needs: [build]
+    strategy:
+      matrix:
+        os: [macos-13, ubuntu-latest]
+        python-version: ["3.7"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Download wheels for Python3.7
+        uses: actions/download-artifact@v3
+        with:
+          # Since we don't build for Python 3.7, we download the Python 3.8 wheel instead.
+          name: wheel-3.8
+          path: dist/
+
+      - run: pip install --upgrade
+          pip
+          dist/clp_logging-*.whl
+          -r requirements-test.txt
+
+      - run: python -m unittest -fv
+
   test:
     needs: [build]
     strategy:
@@ -52,15 +80,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Download wheels for Python3.7
-        if: ${{ '3.7' == matrix.python-version }}
-        uses: actions/download-artifact@v3
-        with:
-          name: wheel-3.8
-          path: dist/
-
       - name: Download wheels for Built Python Versions
-        if: ${{ '3.7' != matrix.python-version }}
         uses: actions/download-artifact@v3
         with:
           name: wheel-${{ matrix.python-version }}
