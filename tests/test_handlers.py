@@ -1,3 +1,5 @@
+import copy
+import inspect
 import logging
 import os
 import signal
@@ -5,12 +7,15 @@ import time
 import unittest
 from ctypes import c_double, c_int
 from datetime import datetime, tzinfo
+from io import open as default_open
 from math import floor
 from multiprocessing.sharedctypes import Array, Synchronized, SynchronizedArray, Value
 from pathlib import Path
-from typing import cast, Dict, IO, List, Optional, Union
+from types import FrameType
+from typing import Any, cast, Dict, IO, List, Optional, Union
 
 import dateutil.parser
+from clp_ffi_py.ir import Deserializer, KeyValuePairLogEvent
 from smart_open import open, register_compressor  # type: ignore
 from zstandard import (
     ZstdCompressionWriter,
@@ -19,13 +24,27 @@ from zstandard import (
     ZstdDecompressor,
 )
 
+from clp_logging.auto_generated_kv_pairs_utils import (
+    LEVEL_KEY,
+    LEVEL_NAME_KEY,
+    LEVEL_NO_KEY,
+    SOURCE_CONTEXT_KEY,
+    SOURCE_CONTEXT_LINE_KEY,
+    SOURCE_CONTEXT_PATH_KEY,
+    ZONED_TIMESTAMP_KEY,
+    ZONED_TIMESTAMP_TZ_KEY,
+    ZONED_TIMESTAMP_UTC_EPOCH_MS_KEY,
+)
 from clp_logging.handlers import (
+    AUTO_GENERATED_KV_PAIRS_KEY,
     CLPBaseHandler,
     CLPFileHandler,
+    ClpKeyValuePairStreamHandler,
     CLPLogLevelTimeout,
     CLPSockHandler,
     CLPStreamHandler,
     DEFAULT_LOG_FORMAT,
+    USER_GENERATED_KV_PAIRS_KEY,
     WARN_PREFIX,
 )
 from clp_logging.protocol import Metadata
@@ -52,6 +71,7 @@ LOG_DIR: Path = Path("unittest-logs")
 FATAL_EXIT_CODE_BASE: int = 128
 
 ASSERT_TIMESTAMP_DELTA_S: float = 0.256
+ASSERT_TIMESTAMP_DELTA_MS: int = floor(ASSERT_TIMESTAMP_DELTA_S * 1000)
 LOG_DELAY_S: float = 0.064
 TIMEOUT_PADDING_S: float = 0.512
 
@@ -747,6 +767,199 @@ class TestCLPSegmentStreaming_RAW(TestCLPSegmentStreamingBase):
         self.enable_compression = False
         self.segment_size = 4096
         super().setUp()
+        self.setup_logging()
+
+
+class ExpectedLogEvent:
+    """
+    Simple class to represent an expected log event, which contains all relevant
+    log event metadata and user-generated kv pairs.
+    """
+
+    def __init__(
+        self,
+        utc_epoch_ms: int,
+        tz: Optional[str],
+        level_no: int,
+        level_name: str,
+        path: Path,
+        line: Optional[int],
+        user_generated_kv_pairs: Dict[str, Any],
+    ) -> None:
+        self.utc_epoch_ms: int = utc_epoch_ms
+        self.tz: Optional[str] = tz
+        self.level_no: int = level_no
+        self.level_name: str = level_name
+        self.path: Path = path
+        self.line: Optional[int] = line
+        self.user_generated_kv_pairs: Dict[str, Any] = user_generated_kv_pairs
+
+
+class TestClpKeyValuePairHandlerBase(unittest.TestCase):
+    """
+    Mirroring `TestCLPBase` for testing CLP key-value pair handlers.
+    """
+
+    # Set by the derived test cases
+    _enable_compression: bool
+    _clp_kv_pair_handler: ClpKeyValuePairStreamHandler
+
+    # Set by `setUp`
+    _clp_log_path: Path
+    _logger: logging.Logger
+    _tz: Optional[str]
+    _expected_log_events: List[ExpectedLogEvent]
+
+    # override
+    @classmethod
+    def setUpClass(cls) -> None:
+        if not LOG_DIR.exists():
+            LOG_DIR.mkdir(parents=True, exist_ok=True)
+        assert LOG_DIR.is_dir()
+
+    # override
+    def setUp(self) -> None:
+        post_fix: str = ".clp.zst" if self._enable_compression else ".clp"
+        self._clp_log_path: Path = LOG_DIR / Path(f"{self.id()}{post_fix}")
+        if self._clp_log_path.exists():
+            self._clp_log_path.unlink()
+        self._logger: logging.Logger = logging.getLogger(self.id())
+        tz: Optional[tzinfo] = datetime.now().astimezone().tzinfo
+        self._tz: Optional[str] = str(tz) if tz is not None else None
+        self._expected_log_events: List[ExpectedLogEvent] = []
+
+    def _read_clp(self) -> List[Dict[str, Any]]:
+        result: List[Dict[str, Any]] = []
+        with open(str(self._clp_log_path), "rb") as ir_stream:
+            deserializer: Deserializer = Deserializer(ir_stream)
+            while True:
+                deserialized_log_event: Optional[KeyValuePairLogEvent] = (
+                    deserializer.deserialize_log_event()
+                )
+                if deserialized_log_event is None:
+                    break
+                result.append(deserialized_log_event.to_dict())
+        return result
+
+    def setup_logging(self) -> None:
+        self._logger.setLevel(logging.DEBUG)
+        self._logger.addHandler(self._clp_kv_pair_handler)
+
+    def test_kv_pair_logging_basic(self) -> None:
+        static_message: Dict[str, str] = {"static_message": "This is a static message"}
+        primitive_dict: Dict[str, Any] = {
+            "str": "str",
+            "int": 1,
+            "float": 1.0,
+            "bool": True,
+            "null": None,
+        }
+        primitive_array: List[Any] = ["str", 1, 1.0, True, None]
+
+        self._log(logging.DEBUG, {"message": f"user_id={self.id()}", "static": static_message})
+        self._log(logging.INFO, {"dict": primitive_dict})
+        self._log(logging.WARNING, {"array": primitive_array})
+        self._log(logging.ERROR, {"array": primitive_array})
+
+        dict_with_array: Dict[str, Any] = copy.deepcopy(primitive_dict)
+        dict_with_array["array"] = primitive_array
+        array_with_dict: List[Any] = copy.deepcopy(primitive_array)
+        array_with_dict.append(primitive_dict)
+        self._log(
+            logging.CRITICAL,
+            {"dict_with_array": dict_with_array, "array_with_dict": array_with_dict},
+        )
+
+        self._close_and_compare()
+
+    def _log(self, level: int, kv_pairs: Dict[str, Any]) -> None:
+        level_name: str = logging.getLevelName(level)
+        path: Path = Path(__file__).resolve()
+        curr_frame: Optional[FrameType] = inspect.currentframe()
+        # NOTE: this line must be right before the actual logging statement
+        line: Optional[int] = curr_frame.f_lineno + 1 if curr_frame is not None else None
+        self._logger.log(level, kv_pairs)
+        expected: ExpectedLogEvent = ExpectedLogEvent(
+            floor(time.time() * 1000), self._tz, level, level_name, path, line, kv_pairs
+        )
+        self._expected_log_events.append(expected)
+
+    def _close_and_compare(self) -> None:
+        self._close()
+        self._compare()
+
+    def _close(self) -> None:
+        logging.shutdown()
+        self._logger.removeHandler(self._clp_kv_pair_handler)
+
+    def _compare(self) -> None:
+        actual_log_events: List[Dict[str, Any]] = self._read_clp()
+        self.assertEqual(len(self._expected_log_events), len(actual_log_events))
+        for actual, expected in zip(actual_log_events, self._expected_log_events):
+            auto_generated_kv_pairs: Dict[str, Any] = actual[AUTO_GENERATED_KV_PAIRS_KEY]
+            user_generated_kv_pairs: Dict[str, Any] = actual[USER_GENERATED_KV_PAIRS_KEY]
+
+            # Check user generated kv pairs
+            self.assertEqual(user_generated_kv_pairs, expected.user_generated_kv_pairs)
+
+            # Check auto generated kv pairs
+            self.assertAlmostEqual(
+                auto_generated_kv_pairs[ZONED_TIMESTAMP_KEY][ZONED_TIMESTAMP_UTC_EPOCH_MS_KEY],
+                expected.utc_epoch_ms,
+                delta=ASSERT_TIMESTAMP_DELTA_MS,
+            )
+            self.assertEqual(
+                auto_generated_kv_pairs[ZONED_TIMESTAMP_KEY][ZONED_TIMESTAMP_TZ_KEY], expected.tz
+            )
+
+            self.assertEqual(auto_generated_kv_pairs[LEVEL_KEY][LEVEL_NO_KEY], expected.level_no)
+            self.assertEqual(
+                auto_generated_kv_pairs[LEVEL_KEY][LEVEL_NAME_KEY], expected.level_name
+            )
+
+            # Check the path by converting the path string to `Path` object
+            self.assertEqual(
+                Path(auto_generated_kv_pairs[SOURCE_CONTEXT_KEY][SOURCE_CONTEXT_PATH_KEY]),
+                expected.path,
+            )
+            if expected.line is not None:
+                self.assertEqual(
+                    auto_generated_kv_pairs[SOURCE_CONTEXT_KEY][SOURCE_CONTEXT_LINE_KEY],
+                    expected.line,
+                )
+
+
+class TestClpKeyValuePairStreamingHandlerRaw(TestClpKeyValuePairHandlerBase):
+    """
+    Test `ClpKeyValuePairStreamingHandler` without compression.
+    """
+
+    # override
+    def setUp(self) -> None:
+        self._enable_compression = False
+        super().setUp()
+        self._clp_kv_pair_handler = ClpKeyValuePairStreamHandler(
+            default_open(self._clp_log_path, "wb"),
+            self._enable_compression,
+            self._tz,
+        )
+        self.setup_logging()
+
+
+class TestClpKeyValuePairStreamingHandlerZstd(TestClpKeyValuePairHandlerBase):
+    """
+    Test `ClpKeyValuePairStreamingHandler` with zstd compression.
+    """
+
+    # override
+    def setUp(self) -> None:
+        self._enable_compression = True
+        super().setUp()
+        self._clp_kv_pair_handler = ClpKeyValuePairStreamHandler(
+            default_open(self._clp_log_path, "wb"),
+            self._enable_compression,
+            self._tz,
+        )
         self.setup_logging()
 
 

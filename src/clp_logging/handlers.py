@@ -37,6 +37,8 @@ from clp_logging.protocol import (
 
 DEFAULT_LOG_FORMAT: str = " %(levelname)s %(name)s %(message)s"
 WARN_PREFIX: str = " [WARN][clp_logging]"
+AUTO_GENERATED_KV_PAIRS_KEY: str = "auto_generated_kv_pairs"
+USER_GENERATED_KV_PAIRS_KEY: str = "user_generated_kv_pairs"
 
 
 def _init_timeinfo(fmt: Optional[str], tz: Optional[str]) -> Tuple[str, str]:
@@ -800,10 +802,10 @@ class CLPFileHandler(CLPStreamHandler):
         )
 
 
-class ClpKeyValuePairHandler(logging.Handler):
+class ClpKeyValuePairStreamHandler(logging.Handler):
     """
-    A custom logging handler that processes log events containing key-value
-    pairs and serializes them into the CLP key-value pair IR format.
+    A custom logging handler that processes log events containing key-value pairs and serializes
+    them into the CLP key-value pair IR format.
 
     Differences from `logging.StreamHandler`:
       - Expects log events (`logging.LogRecord`) to include key-value pairs represented as a Python
@@ -945,8 +947,8 @@ class ClpKeyValuePairHandler(logging.Handler):
         :param user_generated_kv_pairs: A dict of user generated kv pairs.
         """
         log_event: Dict[str, Any] = {
-            "auto_generated": auto_generated_kv_pairs,
-            "user_generated": user_generated_kv_pairs,
+            AUTO_GENERATED_KV_PAIRS_KEY: auto_generated_kv_pairs,
+            USER_GENERATED_KV_PAIRS_KEY: user_generated_kv_pairs,
         }
         assert self._serializer is not None
         self._serializer.serialize_log_event_from_msgpack_map(serialize_dict_to_msgpack(log_event))
