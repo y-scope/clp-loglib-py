@@ -845,7 +845,7 @@ class TestClpKeyValuePairHandlerBase(unittest.TestCase):
         self._logger.setLevel(logging.DEBUG)
         self._logger.addHandler(self._clp_kv_pair_handler)
 
-    def test_kv_pair_logging_basic(self) -> None:
+    def test_basic(self) -> None:
         static_message: Dict[str, str] = {"static_message": "This is a static message"}
         primitive_dict: Dict[str, Any] = {
             "str": "str",
@@ -870,6 +870,10 @@ class TestClpKeyValuePairHandlerBase(unittest.TestCase):
             {"dict_with_array": dict_with_array, "array_with_dict": array_with_dict},
         )
 
+        self._close_and_compare()
+
+    def test_empty(self) -> None:
+        self._log(logging.DEBUG, {})
         self._close_and_compare()
 
     def _log(self, level: int, kv_pairs: Dict[str, Any]) -> None:
