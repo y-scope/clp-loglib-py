@@ -804,8 +804,8 @@ class CLPFileHandler(CLPStreamHandler):
 
 class ClpKeyValuePairStreamHandler(logging.Handler):
     """
-    A custom logging handler that processes log events containing key-value pairs and serializes
-    them into the CLP key-value pair IR format.
+    A custom logging handler that processes log events containing key-value
+    pairs and serializes them into the CLP key-value pair IR format.
 
     Differences from `logging.StreamHandler`:
       - Expects log events (`logging.LogRecord`) to include key-value pairs represented as a Python
