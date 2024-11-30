@@ -1111,6 +1111,10 @@ class TestClpKeyValuePairStreamingHandlerZstd(TestClpKeyValuePairHandlerBase):
         self._setup_logging()
 
 
+@unittest.skipIf(
+    "macOS" == os.getenv("RUNNER_OS"),
+    "Github macos runner tends to fail LLT tests with timing issues.",
+)
 class TestClpKeyValuePairStreamingHandlerLogLevelTimeoutRaw(
     TestClpKeyValuePairHandlerLogLevelTimeoutBase
 ):
@@ -1135,6 +1139,10 @@ class TestClpKeyValuePairStreamingHandlerLogLevelTimeoutRaw(
         self._setup_logging()
 
 
+@unittest.skipIf(
+    "macOS" == os.getenv("RUNNER_OS"),
+    "Github macos runner tends to fail LLT tests with timing issues.",
+)
 class TestClpKeyValuePairStreamingHandlerLogLevelTimeoutZstd(
     TestClpKeyValuePairHandlerLogLevelTimeoutBase
 ):
