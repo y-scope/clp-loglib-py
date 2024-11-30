@@ -795,9 +795,13 @@ class ExpectedLogEvent:
         self.user_generated_kv_pairs: Dict[str, Any] = user_generated_kv_pairs
 
 
-class TestClpKeyValuePairHandlerBase(unittest.TestCase):
+class TestClpKeyValuePairLoggingBase(unittest.TestCase):
     """
-    Mirroring `TestCLPBase` for testing CLP key-value pair handlers.
+    A base class for testing CLP key-value pair handlers.
+
+    TODO: functionality wise this class is mirroring `TestCLPBase`. We should refactor `TestCLPBase`
+    to support both raw-text logging (unstructured logging) and key-value pair logging (structured
+    logging).
     """
 
     # Set by the derived test cases
@@ -828,53 +832,9 @@ class TestClpKeyValuePairHandlerBase(unittest.TestCase):
         self._tz: Optional[str] = str(tz) if tz is not None else None
         self._expected_log_events: List[ExpectedLogEvent] = []
 
-    def _read_clp(self) -> List[Dict[str, Any]]:
-        result: List[Dict[str, Any]] = []
-        with open(str(self._clp_log_path), "rb") as ir_stream:
-            deserializer: Deserializer = Deserializer(ir_stream)
-            while True:
-                deserialized_log_event: Optional[KeyValuePairLogEvent] = (
-                    deserializer.deserialize_log_event()
-                )
-                if deserialized_log_event is None:
-                    break
-                result.append(deserialized_log_event.to_dict())
-        return result
-
-    def setup_logging(self) -> None:
+    def _setup_logging(self) -> None:
         self._logger.setLevel(logging.DEBUG)
         self._logger.addHandler(self._clp_kv_pair_handler)
-
-    def test_basic(self) -> None:
-        static_message: Dict[str, str] = {"static_message": "This is a static message"}
-        primitive_dict: Dict[str, Any] = {
-            "str": "str",
-            "int": 1,
-            "float": 1.0,
-            "bool": True,
-            "null": None,
-        }
-        primitive_array: List[Any] = ["str", 1, 1.0, True, None]
-
-        self._log(logging.DEBUG, {"message": f"user_id={self.id()}", "static": static_message})
-        self._log(logging.INFO, {"dict": primitive_dict})
-        self._log(logging.WARNING, {"array": primitive_array})
-        self._log(logging.ERROR, {"array": primitive_array})
-
-        dict_with_array: Dict[str, Any] = copy.deepcopy(primitive_dict)
-        dict_with_array["array"] = primitive_array
-        array_with_dict: List[Any] = copy.deepcopy(primitive_array)
-        array_with_dict.append(primitive_dict)
-        self._log(
-            logging.CRITICAL,
-            {"dict_with_array": dict_with_array, "array_with_dict": array_with_dict},
-        )
-
-        self._close_and_compare()
-
-    def test_empty(self) -> None:
-        self._log(logging.DEBUG, {})
-        self._close_and_compare()
 
     def _log(self, level: int, kv_pairs: Dict[str, Any]) -> None:
         level_name: str = logging.getLevelName(level)
@@ -932,6 +892,190 @@ class TestClpKeyValuePairHandlerBase(unittest.TestCase):
                     expected.line,
                 )
 
+    def _read_clp(self) -> List[Dict[str, Any]]:
+        result: List[Dict[str, Any]] = []
+        with open(str(self._clp_log_path), "rb") as ir_stream:
+            deserializer: Deserializer = Deserializer(ir_stream)
+            while True:
+                deserialized_log_event: Optional[KeyValuePairLogEvent] = (
+                    deserializer.deserialize_log_event()
+                )
+                if deserialized_log_event is None:
+                    break
+                result.append(deserialized_log_event.to_dict())
+        return result
+
+
+class TestClpKeyValuePairHandlerBase(TestClpKeyValuePairLoggingBase):
+    def test_basic(self) -> None:
+        static_message: Dict[str, str] = {"static_message": "This is a static message"}
+        primitive_dict: Dict[str, Any] = {
+            "str": "str",
+            "int": 1,
+            "float": 1.0,
+            "bool": True,
+            "null": None,
+        }
+        primitive_array: List[Any] = ["str", 1, 1.0, True, None]
+
+        self._log(logging.DEBUG, {"message": f"user_id={self.id()}", "static": static_message})
+        self._log(logging.INFO, {"dict": primitive_dict})
+        self._log(logging.WARNING, {"array": primitive_array})
+        self._log(logging.ERROR, {"array": primitive_array})
+
+        dict_with_array: Dict[str, Any] = copy.deepcopy(primitive_dict)
+        dict_with_array["array"] = primitive_array
+        array_with_dict: List[Any] = copy.deepcopy(primitive_array)
+        array_with_dict.append(primitive_dict)
+        self._log(
+            logging.CRITICAL,
+            {"dict_with_array": dict_with_array, "array_with_dict": array_with_dict},
+        )
+
+        self._close_and_compare()
+
+    def test_empty(self) -> None:
+        self._log(logging.DEBUG, {})
+        self._close_and_compare()
+
+
+class TestClpKeyValuePairHandlerLogLevelTimeoutBase(TestClpKeyValuePairLoggingBase):
+    """
+    Mirror `TestCLPLogLevelTimeoutBase` for testing key-value pair handlers with
+    log level timeout.
+    """
+
+    _loglevel_timeout: CLPLogLevelTimeout
+
+    # override
+    def _close(self) -> None:
+        if self._loglevel_timeout.hard_timeout_thread is not None:
+            self._loglevel_timeout.hard_timeout_thread.cancel()
+        if self._loglevel_timeout.soft_timeout_thread is not None:
+            self._loglevel_timeout.soft_timeout_thread.cancel()
+        super()._close()
+
+    def _setup_handler(self) -> None:
+        raise NotImplementedError("`_setup_handler` must be implemented by derived testers")
+
+    def _test_timeout(
+        self,
+        loglevels: List[int],
+        log_delay: float,
+        hard_deltas: Dict[int, int],
+        soft_deltas: Dict[int, int],
+        expected_timeout_deltas: List[float],
+    ) -> None:
+        """
+        Mirror of `TestCLPLogLevelTimeoutBase._test_timeout`.
+
+        :param loglevels: Generate one log for each entry at given log level.
+        :param log_delay: (fraction of) seconds to sleep between `logger.log` calls.
+        :param hard_deltas: Deltas in ms to initialize `CLPLogLevelTimeout`.
+        :param soft_deltas: Deltas in ms to initialize `CLPLogLevelTimeout`.
+        :param expected_timeout_deltas: Expected elapsed time from start of logging to timeout `i`.
+        """
+
+        expected_timeout_count: int = len(expected_timeout_deltas)
+        # typing for multiprocess.Synchronized* has open issues
+        # https://github.com/python/typeshed/issues/8799
+        # TODO: when the issue is closed we should update the typing here
+        timeout_ts: SynchronizedArray[c_double] = Array(c_double, [0.0] * expected_timeout_count)
+        timeout_count: Synchronized[int] = cast("Synchronized[int]", Value(c_int, 0))
+
+        def timeout_fn() -> None:
+            nonlocal timeout_ts
+            nonlocal timeout_count
+            timeout_ts[timeout_count.value] = c_double(time.time())
+            timeout_count.value += 1
+
+        self._loglevel_timeout = CLPLogLevelTimeout(timeout_fn, hard_deltas, soft_deltas)
+        self._setup_handler()
+
+        start_ts: float = time.time()
+        for i, loglevel in enumerate(loglevels):
+            self._log(loglevel, {"idx": i})
+            time.sleep(log_delay)
+
+        # We want sleep long enough so that the final expected timeout can occur, but also ensure
+        # `time.sleep` receives a non-negative number.
+        time_to_last_timeout: float = max(0, (start_ts + expected_timeout_deltas[-1]) - time.time())
+        time.sleep(time_to_last_timeout)
+
+        self._close_and_compare()
+        self.assertEqual(timeout_count.value, expected_timeout_count)
+        for i in range(expected_timeout_count):
+            self.assertAlmostEqual(
+                timeout_ts[i],  # type: ignore
+                start_ts + expected_timeout_deltas[i],
+                delta=ASSERT_TIMESTAMP_DELTA_S,
+            )
+
+    def test_pushback_soft_timeout(self) -> None:
+        log_delay: float = LOG_DELAY_S
+        soft_delta_s: float = log_delay * 2
+        soft_delta_ms: int = int(soft_delta_s * 1000)
+        self._test_timeout(
+            loglevels=[logging.INFO, logging.INFO, logging.INFO],
+            log_delay=log_delay,
+            hard_deltas={logging.INFO: 30 * 60 * 1000},
+            soft_deltas={logging.INFO: soft_delta_ms},
+            # log_delay < soft delta, so timeout push back should occur
+            # timeout = final log occurrence + soft delta
+            expected_timeout_deltas=[
+                (2 * log_delay) + soft_delta_s,
+                (2 * log_delay) + soft_delta_s + TIMEOUT_PADDING_S,
+            ],
+        )
+
+    def test_multiple_soft_timeout(self) -> None:
+        log_delay: float = LOG_DELAY_S * 2
+        soft_delta_s: float = LOG_DELAY_S
+        soft_delta_ms: int = int(soft_delta_s * 1000)
+        self._test_timeout(
+            loglevels=[logging.INFO, logging.INFO, logging.INFO],
+            log_delay=log_delay,
+            hard_deltas={logging.INFO: 30 * 60 * 1000},
+            soft_deltas={logging.INFO: soft_delta_ms},
+            # log_delay > soft delta, so every log will timeout
+            expected_timeout_deltas=[
+                soft_delta_s,
+                log_delay + soft_delta_s,
+                (2 * log_delay) + soft_delta_s,
+                (2 * log_delay) + soft_delta_s + TIMEOUT_PADDING_S,
+            ],
+        )
+
+    def test_hard_timeout(self) -> None:
+        log_delay: float = LOG_DELAY_S
+        hard_delta_s: float = LOG_DELAY_S * 4
+        hard_delta_ms: int = int(hard_delta_s * 1000)
+        self._test_timeout(
+            loglevels=[logging.INFO, logging.INFO, logging.INFO],
+            log_delay=log_delay,
+            hard_deltas={logging.INFO: hard_delta_ms},
+            soft_deltas={logging.INFO: 3 * 60 * 1000},
+            # hard timeout triggered by first log will occur shortly after the
+            # 3rd log, no pushback occurs
+            expected_timeout_deltas=[
+                hard_delta_s,
+                hard_delta_s + TIMEOUT_PADDING_S,
+            ],
+        )
+
+    def test_end_timeout(self) -> None:
+        self._test_timeout(
+            loglevels=[logging.INFO, logging.INFO, logging.INFO],
+            log_delay=LOG_DELAY_S,
+            hard_deltas={logging.INFO: 30 * 60 * 1000},
+            soft_deltas={logging.INFO: 3 * 60 * 1000},
+            # no deltas occur
+            # timeout = when close is called roughly after last log
+            expected_timeout_deltas=[
+                (3 * LOG_DELAY_S) + TIMEOUT_PADDING_S,
+            ],
+        )
+
 
 class TestClpKeyValuePairStreamingHandlerRaw(TestClpKeyValuePairHandlerBase):
     """
@@ -947,7 +1091,7 @@ class TestClpKeyValuePairStreamingHandlerRaw(TestClpKeyValuePairHandlerBase):
             self._enable_compression,
             self._tz,
         )
-        self.setup_logging()
+        self._setup_logging()
 
 
 class TestClpKeyValuePairStreamingHandlerZstd(TestClpKeyValuePairHandlerBase):
@@ -964,7 +1108,55 @@ class TestClpKeyValuePairStreamingHandlerZstd(TestClpKeyValuePairHandlerBase):
             self._enable_compression,
             self._tz,
         )
-        self.setup_logging()
+        self._setup_logging()
+
+
+class TestClpKeyValuePairStreamingHandlerLogLevelTimeoutRaw(
+    TestClpKeyValuePairHandlerLogLevelTimeoutBase
+):
+    """
+    Test `ClpKeyValuePairStreamingHandler`'s log-level timeout without
+    compression.
+    """
+
+    # override
+    def setUp(self) -> None:
+        self._enable_compression = False
+        super().setUp()
+
+    # override
+    def _setup_handler(self) -> None:
+        self._clp_kv_pair_handler = ClpKeyValuePairStreamHandler(
+            stream=default_open(self._clp_log_path, "wb"),
+            enable_compression=self._enable_compression,
+            timezone=self._tz,
+            loglevel_timeout=self._loglevel_timeout,
+        )
+        self._setup_logging()
+
+
+class TestClpKeyValuePairStreamingHandlerLogLevelTimeoutZstd(
+    TestClpKeyValuePairHandlerLogLevelTimeoutBase
+):
+    """
+    Test `ClpKeyValuePairStreamingHandler`'s log-level timeout with zstd
+    compression.
+    """
+
+    # override
+    def setUp(self) -> None:
+        self._enable_compression = True
+        super().setUp()
+
+    # override
+    def _setup_handler(self) -> None:
+        self._clp_kv_pair_handler = ClpKeyValuePairStreamHandler(
+            stream=default_open(self._clp_log_path, "wb"),
+            enable_compression=self._enable_compression,
+            timezone=self._tz,
+            loglevel_timeout=self._loglevel_timeout,
+        )
+        self._setup_logging()
 
 
 if __name__ == "__main__":

@@ -896,6 +896,8 @@ class ClpKeyValuePairStreamHandler(logging.Handler):
     def close(self) -> None:
         if self._serializer is None:
             return
+        if self._loglevel_timeout:
+            self._loglevel_timeout.timeout()
         # NOTE: Closing the serializer will ensure that any buffered results are flushed and the
         # underlying output stream is properly closed.
         self._serializer.close()
