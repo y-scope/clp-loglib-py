@@ -2,6 +2,11 @@ name: "pr-title-checks"
 
 on:
   pull_request_target:
+    # NOTE: The `pull_request_target` event means GITHUB_TOKEN can access secrets and is granted
+    # read/write repository access by default. So we need to ensure:
+    # - This workflow doesn't inadvertently check out, build, or execute untrusted code from the
+    #   pull request triggered by this event.
+    # - Each job has `permissions` set to only those necessary.
     types: ["edited", "opened", "reopened"]
     branches: ["main"]
 
