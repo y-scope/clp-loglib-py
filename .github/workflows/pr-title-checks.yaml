@@ -9,6 +9,7 @@ on:
     # - Each job has `permissions` set to only those necessary.
     types: ["edited", "opened", "reopened"]
     branches: ["main"]
+
 permissions: {}
 
 concurrency:
