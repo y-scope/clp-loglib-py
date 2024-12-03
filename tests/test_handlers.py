@@ -841,7 +841,7 @@ class TestClpKeyValuePairLoggingBase(unittest.TestCase):
         level_name: str = logging.getLevelName(level)
         path: Path = Path(__file__).resolve()
         curr_frame: Optional[FrameType] = inspect.currentframe()
-        # NOTE: this line must be right before the actual logging statement
+        # NOTE: This line must be right before the actual logging statement
         line: Optional[int] = curr_frame.f_lineno + 1 if curr_frame is not None else None
         self._logger.log(level, kv_pairs)
         expected: ExpectedLogEvent = ExpectedLogEvent(
