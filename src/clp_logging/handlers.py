@@ -885,7 +885,7 @@ class ClpKeyValuePairStreamHandler(logging.Handler):
             return None
         old_stream: IO[bytes] = self._ostream
         self._ostream = stream
-        # TODO: the following call will close the old stream. However, `logging.StreamHandler`'s
+        # TODO: The following call will close the old stream. However, `logging.StreamHandler`'s
         # implementation will only flush the stream but leave it opened. To support this behaviour,
         # we need `clp_ffi_py.ir.Serializer` to allow closing the serializer without closing the
         # underlying output stream.

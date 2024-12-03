@@ -800,7 +800,7 @@ class TestClpKeyValuePairLoggingBase(unittest.TestCase):
     """
     A base class for testing CLP key-value pair handlers.
 
-    TODO: functionality wise this class is mirroring `TestCLPBase`. We should refactor `TestCLPBase`
+    TODO: Functionality wise this class is mirroring `TestCLPBase`. We should refactor `TestCLPBase`
     to support both raw-text logging (unstructured logging) and key-value pair logging (structured
     logging).
     """
@@ -1070,7 +1070,7 @@ class TestClpKeyValuePairHandlerLogLevelTimeoutBase(TestClpKeyValuePairLoggingBa
         expected_timeout_count: int = len(expected_timeout_deltas)
         # typing for multiprocess.Synchronized* has open issues
         # https://github.com/python/typeshed/issues/8799
-        # TODO: when the issue is closed we should update the typing here
+        # TODO: When the issue is closed we should update the typing here
         timeout_ts: SynchronizedArray[c_double] = Array(c_double, [0.0] * expected_timeout_count)
         timeout_count: Synchronized[int] = cast("Synchronized[int]", Value(c_int, 0))
 
