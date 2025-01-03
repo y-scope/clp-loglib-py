@@ -188,3 +188,19 @@ class CLPRemoteHandler(CLPFileHandler):
             print('Object not found:', e)
         self.upload_id = None
         self.obj_key = None
+
+    def timeout(self, log_path: Path) -> None:
+        print("time out start")
+        if not self.upload_id:
+            super().__init__(fpath=log_path)
+            self.initiate_upload(log_path)
+
+        self.multipart_upload()
+        print("time out end")
+
+    def close(self):
+        print("close start")
+        super().close()
+        if self.closed:
+            self.complete_upload()
+        print("close end")
