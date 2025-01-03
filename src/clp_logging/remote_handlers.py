@@ -136,3 +136,43 @@ class CLPRemoteHandler(CLPFileHandler):
                 Bucket=self.bucket, Key=self.obj_key, UploadId=self.upload_id
             )
             raise e
+
+    def complete_upload(self) -> None:
+        if not self.upload_id:
+            raise Exception('No upload process to complete.')
+
+        file_size: int = self.log_path.stat().st_size
+        try:
+            # Upload the remaining segment
+            if file_size - self.multipart_upload_config['pos'] < self.multipart_upload_config['size']:
+                self.multipart_upload_config['size'] = file_size - self.multipart_upload_config['pos']
+                upload_status: Dict[str, int | str] = self._upload_part(self.upload_id)
+                self.multipart_upload_config['index'] += 1
+                self.uploaded_parts.append(upload_status)
+        except Exception as e:
+            self.s3_client.abort_multipart_upload(
+                Bucket=self.bucket, Key=self.obj_key, UploadId=self.upload_id
+            )
+            raise e
+
+        print(self.obj_key)
+        response = self.s3_client.complete_multipart_upload(
+            Bucket=self.bucket,
+            Key=self.obj_key,
+            UploadId=self.upload_id,
+            MultipartUpload={
+                'Parts': [
+                    {'PartNumber': part['PartNumber'], 'ETag': part['ETag'], 'ChecksumSHA256': part['ChecksumSHA256']}
+                    for part in self.uploaded_parts
+                ]
+            },
+        )
+        print(response)
+        print('Complete multipart upload')
+        try:
+            response = self.s3_client.head_object(Bucket=self.bucket, Key=self.obj_key)
+            print('Object metadata:', response)
+        except Exception as e:
+            print('Object not found:', e)
+        self.upload_id = None
+        self.obj_key = None
