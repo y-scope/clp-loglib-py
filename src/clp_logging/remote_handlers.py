@@ -34,6 +34,7 @@ class CLPRemoteHandler(CLPFileHandler):
         self.uploaded_parts: List[Dict[str, int | str]] = []
         self.upload_id: Optional[int] = None
         self.remote_file_count: int = 0
+        self.upload_in_progress: bool = False
 
     def _calculate_part_sha256(self, data: bytes) -> str:
         sha256_hash: hashlib.Hash = hashlib.sha256()
@@ -100,8 +101,12 @@ class CLPRemoteHandler(CLPFileHandler):
         self.obj_key = obj_key
 
     def initiate_upload(self, log_path: Path) -> None:
+        if self.upload_in_progress:
+            raise Exception('An upload is already in progress. Cannot initiate another upload.')
+
         self.log_path: Path = log_path
         self.log_name: str = log_path.name
+        self.upload_in_progress = True
         timestamp: datetime.datetime = datetime.datetime.now()
         self.remote_folder_path: str = f'logs/{timestamp.year}/{timestamp.month}/{timestamp.day}'
 
@@ -186,6 +191,7 @@ class CLPRemoteHandler(CLPFileHandler):
             print('Object metadata:', response)
         except Exception as e:
             print('Object not found:', e)
+        self.upload_in_progress = False
         self.upload_id = None
         self.obj_key = None
 
