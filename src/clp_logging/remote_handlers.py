@@ -33,6 +33,7 @@ class CLPRemoteHandler(CLPFileHandler):
         }
         self.uploaded_parts: List[Dict[str, int | str]] = []
         self.upload_id: Optional[int] = None
+        self.remote_file_count: int = 0
 
     def _calculate_part_sha256(self, data: bytes) -> str:
         sha256_hash: hashlib.Hash = hashlib.sha256()
@@ -43,6 +44,8 @@ class CLPRemoteHandler(CLPFileHandler):
         new_filename: str
         ext: int = self.log_name.find(".")
         upload_time: str = timestamp.strftime("%Y-%m-%d-%H%M%S")
+        if self.remote_file_count != 0:
+            upload_time += "-" + str(self.remote_file_count)
 
         if ext != -1:
             new_filename = f'log_{upload_time}{self.log_name[ext:]}'
@@ -127,7 +130,16 @@ class CLPRemoteHandler(CLPFileHandler):
 
                 # AWS S3 limits object part count to 10000
                 if self.multipart_upload_config['index'] > 10000:
-                    break
+                    self.complete_upload()
+
+                    # Initiate multipart upload to a new S3 object
+                    self.remote_file_count += 1
+                    self.obj_key = self._remote_log_naming()
+                    self.multipart_upload_config['index'] = 1
+                    self.uploaded_parts = []
+                    create_ret = self.s3_client.create_multipart_upload(Bucket=self.bucket, Key=self.obj_key,
+                                                                                        ChecksumAlgorithm='SHA256')
+                    self.upload_id = create_ret['UploadId']
 
         except NoCredentialsError as e:
             raise e
