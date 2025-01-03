@@ -17,8 +17,8 @@ class CLPRemoteHandler(CLPFileHandler):
             self,
             s3_bucket: str,
     ) -> None:
-        self.s3_resource: boto3.resources.factory.s3.ServiceResource = boto3.resource("s3")
-        self.s3_client: boto3.client = boto3.client("s3")
+        self.s3_resource: boto3.resources.factory.s3.ServiceResource = boto3.resource('s3')
+        self.s3_client: boto3.client = boto3.client('s3')
         self.bucket: str = s3_bucket
 
         self.log_name: Optional[str] = None
@@ -43,16 +43,16 @@ class CLPRemoteHandler(CLPFileHandler):
 
     def _remote_log_naming(self, timestamp: datetime.datetime) -> str:
         new_filename: str
-        ext: int = self.log_name.find(".")
-        upload_time: str = timestamp.strftime("%Y-%m-%d-%H%M%S")
+        ext: int = self.log_name.find('.')
+        upload_time: str = timestamp.strftime('%Y-%m-%d-%H%M%S')
         if self.remote_file_count != 0:
-            upload_time += "-" + str(self.remote_file_count)
+            upload_time += '-' + str(self.remote_file_count)
 
         if ext != -1:
             new_filename = f'log_{upload_time}{self.log_name[ext:]}'
         else:
             new_filename = f'{upload_time}_{self.log_name}'
-        new_filename = f"{self.remote_folder_path}/{new_filename}"
+        new_filename = f'{self.remote_folder_path}/{new_filename}'
         return new_filename
 
     def _upload_part(self, upload_id) -> Dict[str, int | str]:
