@@ -45,6 +45,7 @@ class CLPRemoteHandler(CLPFileHandler):
         new_filename: str
         ext: int = self.log_name.find('.')
         upload_time: str = timestamp.strftime('%Y-%m-%d-%H%M%S')
+        # File rotation
         if self.remote_file_count != 0:
             upload_time += '-' + str(self.remote_file_count)
 
@@ -79,8 +80,6 @@ class CLPRemoteHandler(CLPFileHandler):
                 UploadId=upload_id,
                 ChecksumSHA256=sha256_checksum
             )
-            print(f'Uploaded Part {self.multipart_upload_config["index"]}')
-            print(response)
 
             # Store both ETag and SHA256 for validation
             return {
@@ -121,25 +120,36 @@ class CLPRemoteHandler(CLPFileHandler):
             raise Exception('No upload process.')
 
         file_size: int = self.log_path.stat().st_size
-        print(file_size)
         try:
             while (
                 file_size - self.multipart_upload_config['pos']
                 >= self.multipart_upload_config['size']
             ):
                 upload_status: Dict[str, int | str] = self._upload_part(self.upload_id)
-                print(upload_status)
                 self.multipart_upload_config['index'] += 1
                 self.multipart_upload_config['pos'] += self.multipart_upload_config['size']
                 self.uploaded_parts.append(upload_status)
 
                 # AWS S3 limits object part count to 10000
-                if self.multipart_upload_config['index'] > 10000:
-                    self.complete_upload()
+                if self.multipart_upload_config['index'] >= 10000:
+                    self.s3_client.complete_multipart_upload(
+                        Bucket=self.bucket,
+                        Key=self.obj_key,
+                        UploadId=self.upload_id,
+                        MultipartUpload={
+                            'Parts': [
+                                {'PartNumber': part['PartNumber'], 'ETag': part['ETag'],
+                                 'ChecksumSHA256': part['ChecksumSHA256']}
+                                for part in self.uploaded_parts
+                            ]
+                        },
+                    )
 
                     # Initiate multipart upload to a new S3 object
                     self.remote_file_count += 1
-                    self.obj_key = self._remote_log_naming()
+                    timestamp: datetime.datetime = datetime.datetime.now()
+                    self.remote_folder_path = f'logs/{timestamp.year}/{timestamp.month}/{timestamp.day}'
+                    self.obj_key = self._remote_log_naming(timestamp)
                     self.multipart_upload_config['index'] = 1
                     self.uploaded_parts = []
                     create_ret = self.s3_client.create_multipart_upload(Bucket=self.bucket, Key=self.obj_key,
@@ -172,8 +182,7 @@ class CLPRemoteHandler(CLPFileHandler):
             )
             raise e
 
-        print(self.obj_key)
-        response = self.s3_client.complete_multipart_upload(
+        self.s3_client.complete_multipart_upload(
             Bucket=self.bucket,
             Key=self.obj_key,
             UploadId=self.upload_id,
@@ -184,29 +193,18 @@ class CLPRemoteHandler(CLPFileHandler):
                 ]
             },
         )
-        print(response)
-        print('Complete multipart upload')
-        try:
-            response = self.s3_client.head_object(Bucket=self.bucket, Key=self.obj_key)
-            print('Object metadata:', response)
-        except Exception as e:
-            print('Object not found:', e)
         self.upload_in_progress = False
         self.upload_id = None
         self.obj_key = None
 
     def timeout(self, log_path: Path) -> None:
-        print("time out start")
         if not self.upload_id:
             super().__init__(fpath=log_path)
             self.initiate_upload(log_path)
 
         self.multipart_upload()
-        print("time out end")
 
     def close(self):
-        print("close start")
         super().close()
         if self.closed:
             self.complete_upload()
-        print("close end")
