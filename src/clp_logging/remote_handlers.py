@@ -37,11 +37,14 @@ class CLPRemoteHandler(CLPFileHandler):
         self.upload_in_progress: bool = False
 
     def _calculate_part_sha256(self, data: bytes) -> str:
-        sha256_hash: hashlib.Hash = hashlib.sha256()
+        sha256_hash: hashlib._Hash = hashlib.sha256()
         sha256_hash.update(data)
         return base64.b64encode(sha256_hash.digest()).decode('utf-8')
 
     def _remote_log_naming(self, timestamp: datetime.datetime) -> str:
+        if self.log_name is None:
+            raise ValueError("No input file.")
+
         new_filename: str
         ext: int = self.log_name.find('.')
         upload_time: str = timestamp.strftime('%Y-%m-%d-%H%M%S')
@@ -56,7 +59,10 @@ class CLPRemoteHandler(CLPFileHandler):
         new_filename = f'{self.remote_folder_path}/{new_filename}'
         return new_filename
 
-    def _upload_part(self, upload_id) -> Dict[str, int | str]:
+    def _upload_part(self) -> Dict[str, int | str]:
+        if self.log_path is None:
+            raise ValueError("No input file.")
+
         upload_data: bytes
         # Read the latest file
         try:
@@ -77,7 +83,7 @@ class CLPRemoteHandler(CLPFileHandler):
                 Key=self.obj_key,
                 Body=upload_data,
                 PartNumber=self.multipart_upload_config['index'],
-                UploadId=upload_id,
+                UploadId=self.upload_id,
                 ChecksumSHA256=sha256_checksum
             )
 
@@ -89,27 +95,27 @@ class CLPRemoteHandler(CLPFileHandler):
             }
         except Exception as e:
             self.s3_client.abort_multipart_upload(
-                Bucket=self.bucket, Key=self.obj_key, UploadId=upload_id
+                Bucket=self.bucket, Key=self.obj_key, UploadId=self.upload_id
             )
             raise Exception(f'Error occurred during multipart upload on part {self.multipart_upload_config["index"]}: {e}') from e
 
-    def get_obj_key(self) -> str:
+    def get_obj_key(self) -> str | None:
         return self.obj_key
 
-    def set_obj_key(self, obj_key) -> None:
+    def set_obj_key(self, obj_key: str) -> None:
         self.obj_key = obj_key
 
     def initiate_upload(self, log_path: Path) -> None:
         if self.upload_in_progress:
             raise Exception('An upload is already in progress. Cannot initiate another upload.')
 
-        self.log_path: Path = log_path
-        self.log_name: str = log_path.name
+        self.log_path = log_path
+        self.log_name = log_path.name
         self.upload_in_progress = True
         timestamp: datetime.datetime = datetime.datetime.now()
-        self.remote_folder_path: str = f'logs/{timestamp.year}/{timestamp.month}/{timestamp.day}'
+        self.remote_folder_path = f'logs/{timestamp.year}/{timestamp.month}/{timestamp.day}'
 
-        self.obj_key: str = self._remote_log_naming(timestamp)
+        self.obj_key = self._remote_log_naming(timestamp)
         create_ret: Dict[str, Any] = self.s3_client.create_multipart_upload(Bucket=self.bucket, Key=self.obj_key,
                                                                             ChecksumAlgorithm='SHA256')
         self.upload_id = create_ret['UploadId']
@@ -118,6 +124,8 @@ class CLPRemoteHandler(CLPFileHandler):
         # Upload initiation is required before upload
         if not self.upload_id:
             raise Exception('No upload process.')
+        if self.log_path is None:
+            raise ValueError("No input file.")
 
         file_size: int = self.log_path.stat().st_size
         try:
@@ -125,7 +133,7 @@ class CLPRemoteHandler(CLPFileHandler):
                 file_size - self.multipart_upload_config['pos']
                 >= self.multipart_upload_config['size']
             ):
-                upload_status: Dict[str, int | str] = self._upload_part(self.upload_id)
+                upload_status: Dict[str, int | str] = self._upload_part()
                 self.multipart_upload_config['index'] += 1
                 self.multipart_upload_config['pos'] += self.multipart_upload_config['size']
                 self.uploaded_parts.append(upload_status)
@@ -167,13 +175,15 @@ class CLPRemoteHandler(CLPFileHandler):
     def complete_upload(self) -> None:
         if not self.upload_id:
             raise Exception('No upload process to complete.')
+        if self.log_path is None:
+            raise ValueError("No input file.")
 
         file_size: int = self.log_path.stat().st_size
         try:
             # Upload the remaining segment
             if file_size - self.multipart_upload_config['pos'] < self.multipart_upload_config['size']:
                 self.multipart_upload_config['size'] = file_size - self.multipart_upload_config['pos']
-                upload_status: Dict[str, int | str] = self._upload_part(self.upload_id)
+                upload_status: Dict[str, int | str] = self._upload_part()
                 self.multipart_upload_config['index'] += 1
                 self.uploaded_parts.append(upload_status)
         except Exception as e:
@@ -204,7 +214,7 @@ class CLPRemoteHandler(CLPFileHandler):
 
         self.multipart_upload()
 
-    def close(self):
+    def close(self) -> None:
         super().close()
         if self.closed:
             self.complete_upload()
