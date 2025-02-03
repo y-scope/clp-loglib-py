@@ -804,8 +804,8 @@ class CLPFileHandler(CLPStreamHandler):
 
 class ClpKeyValuePairStreamHandler(logging.Handler):
     """
-    A custom logging handler that processes log events containing key-value
-    pairs and serializes them into the CLP key-value pair IR format.
+    A custom logging handler that serializes key-value pair log events into the
+    CLP key-value pair IR format.
 
     Differences from `logging.StreamHandler`:
       - Expects log events (`logging.LogRecord`) to include key-value pairs represented as a Python
@@ -826,7 +826,7 @@ class ClpKeyValuePairStreamHandler(logging.Handler):
             - Must adhere to the same key-value rules.
             - Can be empty.
 
-    :param stream:  A writable byte output stream to which the handler will write the serialized IR
+    :param stream: A writable byte output stream to which the handler will write the serialized IR
         byte sequences.
     :param enable_compression: Whether to compress the serialized IR byte sequences using zstd.
     :param loglevel_timeout: Customized timeout configuration.
@@ -878,7 +878,7 @@ class ClpKeyValuePairStreamHandler(logging.Handler):
         except Exception:
             self.handleError(record)
 
-    # Added to `logging.StreamHandler` in python 3.7
+    # Added to `logging.StreamHandler` in Python 3.7
     # override
     def setStream(self, stream: IO[bytes]) -> Optional[IO[bytes]]:
         if stream is self._ostream:
@@ -927,7 +927,7 @@ class ClpKeyValuePairStreamHandler(logging.Handler):
         :raise TypeError: If `record.msg` is not a Python dictionary.
         """
         if self._is_closed():
-            raise IOError("The handler has been closed.")
+            raise IOError("Stream already closed.")
 
         if not isinstance(record.msg, dict):
             raise TypeError("The log msg must be a valid Python dictionary.")
