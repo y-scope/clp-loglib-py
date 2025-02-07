@@ -14,7 +14,7 @@ readme = "README.md"
 requires-python = ">=3.7"
 dependencies = [
     "backports.zoneinfo >= 0.2.1; python_version < '3.9'",
-    "clp-ffi-py == 0.1.0b1",
+    "clp-ffi-py == 0.0.14",
     "typing-extensions >= 3.7.4",
     "tzlocal == 5.1; python_version < '3.8'",
     "tzlocal >= 5.2; python_version >= '3.8'",
