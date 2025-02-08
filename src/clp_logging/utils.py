@@ -18,7 +18,7 @@ class Timestamp:
         ts: float = time.time()
         return Timestamp(
             unix_ts=floor(ts * 1000),
-            utc_offset=time.localtime(ts).tm_isdst,
+            utc_offset=time.localtime(ts).tm_gmtoff,
         )
 
     def __init__(self, unix_ts: int, utc_offset: int):
