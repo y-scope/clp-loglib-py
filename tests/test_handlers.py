@@ -927,10 +927,11 @@ class TestClpKeyValuePairHandlerBase(TestClpKeyValuePairLoggingBase):
             {"dict_with_array": dict_with_array, "array_with_dict": array_with_dict},
         )
 
+        self._log(logging.DEBUG, {})
+
         self._close_and_compare()
 
     def test_empty(self) -> None:
-        self._log(logging.DEBUG, {})
         self._close_and_compare()
 
 
