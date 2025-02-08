@@ -772,7 +772,7 @@ class TestCLPSegmentStreaming_RAW(TestCLPSegmentStreamingBase):
 class ExpectedLogEvent:
     """
     Simple class to represent an expected log event, which contains all relevant
-    log event metadata and user-generated kv pairs.
+    log event metadata and user-generated kv-pairs.
     """
 
     def __init__(
@@ -796,7 +796,7 @@ class TestClpKeyValuePairLoggingBase(unittest.TestCase):
     """
     A base class for testing CLP key-value pair handlers.
 
-    TODO: Functionality wise this class is mirroring `TestCLPBase`. We should refactor `TestCLPBase`
+    TODO: Functionality-wise, this class mirrors `TestCLPBase`. We should refactor `TestCLPBase`
     to support both raw-text logging (unstructured logging) and key-value pair logging (structured
     logging).
     """
@@ -819,8 +819,8 @@ class TestClpKeyValuePairLoggingBase(unittest.TestCase):
 
     # override
     def setUp(self) -> None:
-        post_fix: str = ".clp.zst" if self._enable_compression else ".clp"
-        self._clp_log_path: Path = LOG_DIR / Path(f"{self.id()}{post_fix}")
+        file_extension: str = ".clp.zst" if self._enable_compression else ".clp"
+        self._clp_log_path: Path = LOG_DIR / Path(f"{self.id()}{file_extension}")
         if self._clp_log_path.exists():
             self._clp_log_path.unlink()
         self._logger: logging.Logger = logging.getLogger(self.id())
@@ -877,7 +877,6 @@ class TestClpKeyValuePairLoggingBase(unittest.TestCase):
                 auto_generated_kv_pairs[LEVEL_KEY][LEVEL_NAME_KEY], expected.level_name
             )
 
-            # Check the path by converting the path string to `Path` object
             self.assertEqual(
                 Path(auto_generated_kv_pairs[SOURCE_CONTEXT_KEY][SOURCE_CONTEXT_PATH_KEY]),
                 expected.path,
