@@ -7,7 +7,7 @@ import time
 import unittest
 from ctypes import c_double, c_int
 from datetime import datetime, tzinfo
-from io import open as default_open
+from io import open as io_open
 from math import floor
 from multiprocessing.sharedctypes import Array, Synchronized, SynchronizedArray, Value
 from pathlib import Path
@@ -945,7 +945,7 @@ class TestClpKeyValuePairStreamingHandlerRaw(TestClpKeyValuePairHandlerBase):
         self._enable_compression = False
         super().setUp()
         self._clp_kv_pair_handler = ClpKeyValuePairStreamHandler(
-            default_open(self._clp_log_path, "wb"),
+            io_open(self._clp_log_path, "wb"),
             self._enable_compression,
         )
         self._setup_logging()
@@ -961,7 +961,7 @@ class TestClpKeyValuePairStreamingHandlerZstd(TestClpKeyValuePairHandlerBase):
         self._enable_compression = True
         super().setUp()
         self._clp_kv_pair_handler = ClpKeyValuePairStreamHandler(
-            default_open(self._clp_log_path, "wb"),
+            io_open(self._clp_log_path, "wb"),
             self._enable_compression,
         )
         self._setup_logging()
