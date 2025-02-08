@@ -12,9 +12,9 @@ jobs:
       matrix:
         python-version: ["3.8", "3.11"]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -32,7 +32,7 @@ jobs:
 
       - run: python -m build
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.python-version }}
           path: dist/*
@@ -42,18 +42,18 @@ jobs:
     needs: [build]
     strategy:
       matrix:
-        os: [macos-13, ubuntu-latest]
+        os: [macos-13, ubuntu-22.04]
         python-version: ["3.7"]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Download wheels for Python3.7
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           # Since we don't build for Python 3.7, we download the Python 3.8 wheel instead.
           name: wheel-3.8
@@ -74,14 +74,14 @@ jobs:
         python-version: ["3.8", "3.11"]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Download wheels for Built Python Versions
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: wheel-${{ matrix.python-version }}
           path: dist/
