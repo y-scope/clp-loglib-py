@@ -136,9 +136,9 @@ class CLPBaseHandler(logging.Handler, metaclass=ABCMeta):
     # override
     def emit(self, record: logging.LogRecord) -> None:
         """
-        Override `logging.Handler.emit` in base class to ensure
-        `logging.Handler.handleError` is always called and avoid requiring a
-        `logging.LogRecord` to call internal writing functions.
+        Implements `logging.Handler.emit` to ensure
+        `logging.Handler.handleError` is always called and so derived classes
+        only need to implement `_write` instead of implementing this method.
         """
         msg: str = self.format(record) + "\n"
         try:
@@ -861,9 +861,8 @@ class ClpKeyValuePairStreamHandler(logging.Handler):
     # override
     def emit(self, record: logging.LogRecord) -> None:
         """
-        Overrides `logging.Handler.emit` to ensure `logging.Handler.handleError`
-        is always called and avoid requiring a `logging.LogRecord` to call
-        internal writing functions.
+        Overrides `logging.Handler.emit` to ensure the given record is encoded
+        using CLP IR format before writing to the underlying stream.
 
         :param record: The log event to serialize.
         """
