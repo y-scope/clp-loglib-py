@@ -771,8 +771,8 @@ class TestCLPSegmentStreaming_RAW(TestCLPSegmentStreamingBase):
 
 class ExpectedLogEvent:
     """
-    An expected kv-pair log event, which contains all relevant log event metadata and user-generated
-    kv-pairs.
+    An expected kv-pair log event, which contains all relevant log event
+    metadata and user-generated kv-pairs.
     """
 
     def __init__(

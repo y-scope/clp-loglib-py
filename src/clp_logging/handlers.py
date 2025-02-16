@@ -223,7 +223,7 @@ class CLPLogLevelTimeout:
         self.timeout_fn: Callable[[], None] = timeout_fn
         self.next_hard_timeout_ts: int = ULONG_MAX
         self.min_soft_timeout_delta: int = ULONG_MAX
-        self.ostream: Optional[Union[ZstdCompressionWriter, IO[bytes], Serializer]] = None
+        self.ostream: Optional[Union[ZstdCompressionWriter, IO[bytes]]] = None
         self.hard_timeout_thread: Optional[Timer] = None
         self.soft_timeout_thread: Optional[Timer] = None
 
@@ -875,9 +875,10 @@ class ClpKeyValuePairStreamHandler(logging.Handler):
     # override
     def setStream(self, stream: IO[bytes]) -> Optional[IO[bytes]]:
         """
-        Sets the instance's stream to the given value, if it's different from the current value. The
-        old stream is flushed before the new stream is set.
-        
+        Sets the instance's stream to the given value, if it's different from
+        the current value. The old stream is flushed before the new stream is
+        set.
+
         NOTE: The old stream will also be closed by this method.
 
         :param stream: A writable byte output stream to which the handler will write the serialized
