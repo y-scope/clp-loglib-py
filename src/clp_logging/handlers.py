@@ -807,27 +807,27 @@ class ClpKeyValuePairStreamHandler(logging.Handler):
     CLP key-value pair IR format.
 
     Differences from `logging.StreamHandler`:
-      - Expects log events (`logging.LogRecord`) to include key-value pairs represented as a Python
-        dictionary.
-      - Serializes the key-value pairs into the CLP key-value pair IR format before writing to the
-        stream.
 
-    Rules for key-value pair representation:
-      - Key:
-        - Must be of type `str`.
-      - Value:
-        - Must be one of the following types:
-          - Primitive types: `int`, `float`, `str`, `bool`, or `None`.
-          - Arrays:
-            - May contain primitive values, dictionaries, or nested arrays.
-            - Can be empty.
-          - Dictionaries:
-            - Must adhere to the same key-value rules.
-            - Can be empty.
+    - Log events (`logging.LogRecord`) should contain the key-value pairs that a user wants to log
+      as a Python dictionary.
+      - As a result, the key-value pairs will not be formatted into a string before being written.
+    - The key-value pairs will be serialized into the CLP key-value pair IR format before writing to
+      the stream.
+
+    Key-value pairs in the log event must abide by the following rules:
+    - Keys must be of type `str`.
+    - Values must be one of the following types:
+      - Primitives: `int`, `float`, `str`, `bool`, or `None`.
+      - Arrays, where each array:
+        - may contain primitive values, dictionaries, or nested arrays.
+        - can be empty.
+      - Dictionaries, where each dictionary:
+        - must adhere to the aforementioned rules for keys and values.
+        - can be empty.
 
     :param stream: A writable byte output stream to which the handler will write the serialized IR
         byte sequences.
-    :param enable_compression: Whether to compress the serialized IR byte sequences using zstd.
+    :param enable_compression: Whether to compress the serialized IR byte sequences using Zstandard.
     """
 
     def __init__(
@@ -853,7 +853,7 @@ class ClpKeyValuePairStreamHandler(logging.Handler):
         if fmt is None:
             return
         warnings.warn(
-            f"Formatter is currently not supported in the current {self.__class__.__name__}",
+            f"{self.__class__.__name__} doesn't currently support Formatters",
             category=RuntimeWarning,
         )
         self._formatter = fmt
@@ -875,9 +875,10 @@ class ClpKeyValuePairStreamHandler(logging.Handler):
     # override
     def setStream(self, stream: IO[bytes]) -> Optional[IO[bytes]]:
         """
-        Sets the instance’s stream to the specified value, if it is different. The old stream is
-        flushed before the new stream is set.
-        NOTE: The old stream will be closed by calling this method.
+        Sets the instance's stream to the given value, if it's different from the current value. The
+        old stream is flushed before the new stream is set.
+        
+        NOTE: The old stream will also be closed by this method.
 
         :param stream: A writable byte output stream to which the handler will write the serialized
             IR byte sequences.
@@ -891,10 +892,10 @@ class ClpKeyValuePairStreamHandler(logging.Handler):
 
         old_stream: IO[bytes] = self._ostream
         with self.lock if self.lock else nullcontext():
-            # TODO: The following call will close the old stream. However, `logging.StreamHandler`'s
-            # implementation will only flush the stream but leave it opened. To support this
-            # behaviour, we need `clp_ffi_py.ir.Serializer` to allow closing the serializer without
-            # closing the underlying output stream.
+            # TODO: The following call will close the old stream whereas `logging.StreamHandler`'s
+            # implementation will only flush the stream without closing it. To support
+            # `logging.StreamHandler`'s behaviour, we need `clp_ffi_py.ir.Serializer` to allow
+            # closing the serializer without closing the underlying output stream.
             self._init_new_serializer(stream)
             self._ostream = stream
         return old_stream
@@ -911,7 +912,7 @@ class ClpKeyValuePairStreamHandler(logging.Handler):
 
     def _close_serializer(self) -> None:
         """
-        Closes the current serializer if it has been set.
+        Closes the current serializer if it's open.
 
         NOTE: The underlying output stream will also be closed.
         """
@@ -923,7 +924,7 @@ class ClpKeyValuePairStreamHandler(logging.Handler):
 
     def _init_new_serializer(self, stream: IO[bytes]) -> None:
         """
-        Initializes a new serializer that writes to the given stream.
+        Initializes a new serializer that will write to the given stream.
 
         :param stream: The stream that the underlying serializer will write to.
         """
@@ -944,7 +945,7 @@ class ClpKeyValuePairStreamHandler(logging.Handler):
             raise RuntimeError("Stream already closed.")
 
         if not isinstance(record.msg, dict):
-            raise TypeError("The log msg must be a valid Python dictionary.")
+            raise TypeError("`record.msg` must be a Python dictionary.")
 
         self._serialize_kv_pair_log_event(
             self._auto_gen_kv_pairs_buf.generate(Timestamp.now(), record), record.msg
@@ -954,8 +955,8 @@ class ClpKeyValuePairStreamHandler(logging.Handler):
         self, auto_gen_kv_pairs: Dict[str, Any], user_gen_kv_pairs: Dict[str, Any]
     ) -> None:
         """
-        :param auto_gen_kv_pairs: A dict of auto generated kv pairs.
-        :param user_gen_kv_pairs: A dict of user generated kv pairs.
+        :param auto_gen_kv_pairs: A dict of auto-generated kv-pairs.
+        :param user_gen_kv_pairs: A dict of user-generated kv-pairs.
         """
         if self._is_closed():
             raise RuntimeError("Stream already closed.")

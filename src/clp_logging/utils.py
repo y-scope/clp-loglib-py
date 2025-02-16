@@ -6,8 +6,7 @@ from math import floor
 
 class Timestamp:
     """
-    This class represents a Unix timestamp along with the timezone offset from
-    UTC.
+    A timestamp represented as a Unix timestamp and a timezone offset from UTC.
     """
 
     @staticmethod
@@ -23,7 +22,7 @@ class Timestamp:
 
     def __init__(self, unix_ts: int, utc_offset: int):
         """
-        Initializes a `Timestamp` instance with the current time.
+        Initializes a `Timestamp` instance with the given time.
 
         :param unix_ts: Unix timestamp in milliseconds.
         :param utc_offset: The number of seconds the timezone is ahead of
@@ -34,7 +33,7 @@ class Timestamp:
 
     def get_unix_ts(self) -> int:
         """
-        :return: The Unix timestamp (milliseconds since the Unix epoch).
+        :return: The Unix timestamp in milliseconds.
         """
         return self._unix_ts
 

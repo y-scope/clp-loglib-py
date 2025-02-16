@@ -771,8 +771,8 @@ class TestCLPSegmentStreaming_RAW(TestCLPSegmentStreamingBase):
 
 class ExpectedLogEvent:
     """
-    Simple class to represent an expected log event, which contains all relevant
-    log event metadata and user-generated kv-pairs.
+    An expected kv-pair log event, which contains all relevant log event metadata and user-generated
+    kv-pairs.
     """
 
     def __init__(
@@ -794,7 +794,7 @@ class ExpectedLogEvent:
 
 class TestClpKeyValuePairLoggingBase(unittest.TestCase):
     """
-    A base class for testing CLP key-value pair handlers.
+    A base class for testing CLP key-value pair logging handlers.
 
     TODO: Functionality-wise, this class mirrors `TestCLPBase`. We should refactor `TestCLPBase`
     to support both raw-text logging (unstructured logging) and key-value pair logging (structured
@@ -820,7 +820,7 @@ class TestClpKeyValuePairLoggingBase(unittest.TestCase):
     # override
     def setUp(self) -> None:
         file_extension: str = ".clp.zst" if self._enable_compression else ".clp"
-        self._clp_log_path: Path = LOG_DIR / Path(f"{self.id()}{file_extension}")
+        self._clp_log_path: Path = LOG_DIR / f"{self.id()}{file_extension}"
         if self._clp_log_path.exists():
             self._clp_log_path.unlink()
         self._logger: logging.Logger = logging.getLogger(self.id())
@@ -834,6 +834,7 @@ class TestClpKeyValuePairLoggingBase(unittest.TestCase):
         level_name: str = logging.getLevelName(level)
         path: Path = Path(__file__).resolve()
         curr_frame: Optional[FrameType] = inspect.currentframe()
+
         # NOTE: This line must be right before the actual logging statement
         line: Optional[int] = curr_frame.f_lineno + 1 if curr_frame is not None else None
         self._logger.log(level, kv_pairs)
