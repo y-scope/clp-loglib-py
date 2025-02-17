@@ -861,8 +861,8 @@ class ClpKeyValuePairStreamHandler(logging.Handler):
     # override
     def emit(self, record: logging.LogRecord) -> None:
         """
-        Overrides `logging.Handler.emit` to ensure the given record is encoded
-        using CLP IR format before writing to the underlying stream.
+        Implements `logging.Handler.emit` to encode the given record into CLP's
+        IR format before it's written to the underlying stream.
 
         :param record: The log event to serialize.
         """
