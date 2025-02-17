@@ -27,13 +27,13 @@ from zstandard import (
 from clp_logging.auto_generated_kv_pairs_utils import (
     LEVEL_KEY,
     LEVEL_NAME_KEY,
-    LEVEL_NO_KEY,
-    SOURCE_CONTEXT_KEY,
-    SOURCE_CONTEXT_LINE_KEY,
-    SOURCE_CONTEXT_PATH_KEY,
+    LEVEL_NUM_KEY,
+    SOURCE_LOCATION_KEY,
+    SOURCE_LOCATION_LINE_KEY,
+    SOURCE_LOCATION_PATH_KEY,
     TIMESTAMP_KEY,
-    TIMESTAMP_UNIX_TS_MS,
-    TIMESTAMP_UTC_OFFSET_SEC,
+    TIMESTAMP_UNIX_MILLISECS_KEY,
+    TIMESTAMP_UTC_OFFSET_SECS_KEY,
 )
 from clp_logging.handlers import (
     CLPBaseHandler,
@@ -864,27 +864,27 @@ class TestClpKeyValuePairLoggingBase(unittest.TestCase):
 
             # Check auto generated kv pairs
             self.assertAlmostEqual(
-                auto_generated_kv_pairs[TIMESTAMP_KEY][TIMESTAMP_UNIX_TS_MS],
+                auto_generated_kv_pairs[TIMESTAMP_KEY][TIMESTAMP_UNIX_MILLISECS_KEY],
                 expected.ts.get_unix_ts(),
                 delta=ASSERT_TIMESTAMP_DELTA_MS,
             )
             self.assertEqual(
-                auto_generated_kv_pairs[TIMESTAMP_KEY][TIMESTAMP_UTC_OFFSET_SEC],
+                auto_generated_kv_pairs[TIMESTAMP_KEY][TIMESTAMP_UTC_OFFSET_SECS_KEY],
                 expected.ts.get_utc_offset(),
             )
 
-            self.assertEqual(auto_generated_kv_pairs[LEVEL_KEY][LEVEL_NO_KEY], expected.level_no)
+            self.assertEqual(auto_generated_kv_pairs[LEVEL_KEY][LEVEL_NUM_KEY], expected.level_no)
             self.assertEqual(
                 auto_generated_kv_pairs[LEVEL_KEY][LEVEL_NAME_KEY], expected.level_name
             )
 
             self.assertEqual(
-                Path(auto_generated_kv_pairs[SOURCE_CONTEXT_KEY][SOURCE_CONTEXT_PATH_KEY]),
+                Path(auto_generated_kv_pairs[SOURCE_LOCATION_KEY][SOURCE_LOCATION_PATH_KEY]),
                 expected.path,
             )
             if expected.line is not None:
                 self.assertEqual(
-                    auto_generated_kv_pairs[SOURCE_CONTEXT_KEY][SOURCE_CONTEXT_LINE_KEY],
+                    auto_generated_kv_pairs[SOURCE_LOCATION_KEY][SOURCE_LOCATION_LINE_KEY],
                     expected.line,
                 )
 
