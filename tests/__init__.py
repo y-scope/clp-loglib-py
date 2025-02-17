@@ -1,7 +1,11 @@
 import unittest
 from typing import Iterable, Optional, Union
 
-from tests.test_handlers import TestCLPBase, TestCLPSegmentStreamingBase
+from tests.test_handlers import (
+    TestCLPBase,
+    TestClpKeyValuePairLoggingBase,
+    TestCLPSegmentStreamingBase,
+)
 
 
 def add_tests(suite: unittest.TestSuite, loader: unittest.TestLoader, test_class: type) -> None:
@@ -34,5 +38,8 @@ def load_tests(
 
     for seg_test_class in TestCLPSegmentStreamingBase.__subclasses__():
         add_tests(suite, loader, seg_test_class)
+
+    for kv_pair_handler_test_class in TestClpKeyValuePairLoggingBase.__subclasses__():
+        add_tests(suite, loader, kv_pair_handler_test_class)
 
     return suite
