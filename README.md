@@ -33,12 +33,6 @@ can be installed with `pip`:
 
 ## Logging key-value pairs with `ClpKeyValuePairStreamHandler`
 
-`ClpKeyValuePairStreamHandler`, introduced in version `0.0.14`, allows an application to log and
-serialize key-value pair objects as log events into CLP key-value pair IR stream format. It works
-similar as Python standard `logging.StreamHandler`. The only difference is that log events
-(`logging.LogRecord`) given to this handler will be key-value pairs as a Python dictionary. It will
-be directly serialized into the kv-pair IR stream without being formatted as a string.
-
 Introduced in version 0.0.14, `ClpKeyValuePairStreamHandler` enables applications to log and
 serialize key-value pair objects directly into the CLP key-value pair IR stream format using
 Python's standard logging APIs. It operates similarly to Python's standard `logging.StreamHandler`,
