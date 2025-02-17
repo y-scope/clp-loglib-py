@@ -778,14 +778,14 @@ class ExpectedLogEvent:
     def __init__(
         self,
         ts: Timestamp,
-        level_no: int,
+        level_num: int,
         level_name: str,
         path: Path,
         line: Optional[int],
         user_generated_kv_pairs: Dict[str, Any],
     ) -> None:
         self.ts: Timestamp = ts
-        self.level_no: int = level_no
+        self.level_num: int = level_num
         self.level_name: str = level_name
         self.path: Path = path
         self.line: Optional[int] = line
@@ -873,7 +873,7 @@ class TestClpKeyValuePairLoggingBase(unittest.TestCase):
                 expected.ts.get_utc_offset(),
             )
 
-            self.assertEqual(auto_generated_kv_pairs[LEVEL_KEY][LEVEL_NUM_KEY], expected.level_no)
+            self.assertEqual(auto_generated_kv_pairs[LEVEL_KEY][LEVEL_NUM_KEY], expected.level_num)
             self.assertEqual(
                 auto_generated_kv_pairs[LEVEL_KEY][LEVEL_NAME_KEY], expected.level_name
             )
