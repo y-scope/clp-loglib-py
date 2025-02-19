@@ -41,11 +41,12 @@ This handler enables applications to write structured log events directly into C
 (kv-pair) IR stream format. The handler accepts structured log events in the form of Python
 dictionaries, where each dictionary entry must abide by the requirements detailed
 [below](#key-value-pair-requirements). The handler will also automatically include certain
-[metadata](#automatically-generated-kv-pairs), like the log event's level, with each log event.
+[metadata](#automatically-generated-kv-pairs) (e.g., the log event's level) with each log event.
 
 > [!NOTE]
 > Since this handler accepts structured log events, it doesn't support setting a
-> [Formatter][py-logging-formatter] (because the log events don't need formatting into a string).
+> [Formatter][py-logging-formatter] (because the log events don't need to be formatted into a
+> string).
 
 > [!WARNING]
 > `ClpKeyValuePairStreamHandler` currently doesn't support
@@ -81,7 +82,7 @@ The handler adds the following auto-generated kv-pairs to each log event:
 | Key                 | Value type | Description                                       |
 |---------------------|------------|---------------------------------------------------|
 | `timestamp`         | `dict`     | The log event's timestamp                         |
-| - `unix_millisecs`  | `int`      | The timestamp as a Unix timestamp in milliseconds |
+| - `unix_millisecs`  | `int`      | The timestamp in milliseconds since the Unix epoch |
 | - `utc_offset_secs` | `int`      | The timestamp's UTC offset in seconds             |
 | `level`             | `dict`     | The log event's level                             |
 | - `name`            | `str`      | The level's name                                  |
