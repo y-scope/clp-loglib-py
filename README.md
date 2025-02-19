@@ -79,17 +79,17 @@ and the latter as *auto-generated* kv-pairs.
 
 The handler adds the following auto-generated kv-pairs to each log event:
 
-| Key                 | Value type | Description                                       |
-|---------------------|------------|---------------------------------------------------|
-| `timestamp`         | `dict`     | The log event's timestamp                         |
+| Key                 | Value type | Description                                        |
+|---------------------|------------|----------------------------------------------------|
+| `timestamp`         | `dict`     | The log event's timestamp                          |
 | - `unix_millisecs`  | `int`      | The timestamp in milliseconds since the Unix epoch |
-| - `utc_offset_secs` | `int`      | The timestamp's UTC offset in seconds             |
-| `level`             | `dict`     | The log event's level                             |
-| - `name`            | `str`      | The level's name                                  |
-| - `num`             | `int`      | The level's numeric value                         |
-| `source_location`   | `dict`     | The source location of the logging statement      |
-| - `path`            | `str`      | The source location's path                        |
-| - `line`            | `int`      | The source location's line number                 |
+| - `utc_offset_secs` | `int`      | The timestamp's UTC offset in seconds              |
+| `level`             | `dict`     | The log event's level                              |
+| - `name`            | `str`      | The level's name                                   |
+| - `num`             | `int`      | The level's numeric value                          |
+| `source_location`   | `dict`     | The source location of the logging statement       |
+| - `path`            | `str`      | The source location's path                         |
+| - `line`            | `int`      | The source location's line number                  |
 
 ### Example: `ClpKeyValuePairStreamHandler`
 
