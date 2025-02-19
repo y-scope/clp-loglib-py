@@ -357,6 +357,5 @@ word][7].
 
 [clp-ffi-py-deserializer-doc]: https://github.com/y-scope/clp-ffi-py?tab=readme-ov-file#example-code-using-deserializer-to-read-keyvaluepairlogevents-from-an-ir-stream
 [clp-ffi-py-deserializer-example]: https://github.com/y-scope/clp-ffi-py?tab=readme-ov-file#example-code-using-deserializer-to-read-keyvaluepairlogevents-from-an-ir-stream
-[clp-ffi-py-kv-pair-ir-stream]: https://github.com/y-scope/clp-ffi-py?tab=readme-ov-file#using-key-value-pair-ir-streams
 [clp-ffi-py-pypi]: https://pypi.org/project/clp-ffi-py/
 [py-logging-formatter]: https://docs.python.org/3/library/logging.html#logging.Formatter
