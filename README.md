@@ -83,7 +83,7 @@ The handler adds the following auto-generated kv-pairs to each log event:
 |---------------------|------------|----------------------------------------------------|
 | `timestamp`         | `dict`     | The log event's timestamp                          |
 | - `unix_millisecs`  | `int`      | The timestamp in milliseconds since the Unix epoch |
-| - `utc_offset_secs` | `int`      | The timestamp's UTC offset in seconds              |
+| - `utc_offset_secs` | `int`      | The timestamp's offset fom UTC, in seconds         |
 | `level`             | `dict`     | The log event's level                              |
 | - `name`            | `str`      | The level's name                                   |
 | - `num`             | `int`      | The level's numeric value                          |
