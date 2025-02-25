@@ -102,12 +102,17 @@ class _LockedStream:
         with self._lock:
             return self._stream.write(b)
 
-    def flush(self) -> None:
+    def flush(self, flush_mode: Optional[int] = None) -> None:
         with self._lock:
-            self._stream.flush()
+            if flush_mode is None:
+                self._stream.flush()
+            else:
+                assert isinstance(self._stream, ZstdCompressionWriter)
+                self._stream.flush(flush_mode)
 
     def close(self) -> None:
-        self._stream.close()
+        with self._lock:
+            self._stream.close()
 
 
 class CLPBaseHandler(logging.Handler, metaclass=ABCMeta):
