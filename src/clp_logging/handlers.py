@@ -10,7 +10,7 @@ from math import floor
 from pathlib import Path
 from queue import Empty, Queue
 from signal import SIGINT, signal, SIGTERM
-from threading import Lock, Thread, Timer
+from threading import Thread, Timer
 from types import FrameType
 from typing import Any, Callable, ClassVar, Dict, IO, Optional, Tuple, Union
 
@@ -87,32 +87,6 @@ def _encode_log_event(msg: str, last_timestamp_ms: int) -> Tuple[bytearray, int]
         timestamp_ms - last_timestamp_ms, msg.encode()
     )
     return clp_msg, timestamp_ms
-
-
-class _LockedStream:
-    """
-    A wrapper class for output streams that locks before `write` or `flush`.
-    """
-
-    def __init__(self, stream: Union[ZstdCompressionWriter, IO[bytes]]) -> None:
-        self._stream: Union[ZstdCompressionWriter, IO[bytes]] = stream
-        self._lock: Lock = Lock()
-
-    def write(self, b: Union[bytes, bytearray]) -> int:
-        with self._lock:
-            return self._stream.write(b)
-
-    def flush(self, flush_mode: Optional[int] = None) -> None:
-        with self._lock:
-            if flush_mode is None:
-                self._stream.flush()
-            else:
-                assert isinstance(self._stream, ZstdCompressionWriter)
-                self._stream.flush(flush_mode)
-
-    def close(self) -> None:
-        with self._lock:
-            self._stream.close()
 
 
 class CLPBaseHandler(logging.Handler, metaclass=ABCMeta):
@@ -249,11 +223,11 @@ class CLPLogLevelTimeout:
         self.timeout_fn: Callable[[], None] = timeout_fn
         self.next_hard_timeout_ts: int = ULONG_MAX
         self.min_soft_timeout_delta: int = ULONG_MAX
-        self.ostream: Optional[_LockedStream] = None
+        self.ostream: Optional[Union[ZstdCompressionWriter, IO[bytes]]] = None
         self.hard_timeout_thread: Optional[Timer] = None
         self.soft_timeout_thread: Optional[Timer] = None
 
-    def set_ostream(self, ostream: _LockedStream) -> None:
+    def set_ostream(self, ostream: Union[ZstdCompressionWriter, IO[bytes]]) -> None:
         self.ostream = ostream
 
     def timeout(self) -> None:
@@ -447,7 +421,7 @@ class CLPSockListener:
 
         with log_path.open("ab") as log:
             # Since the compression may be disabled, context manager is not used
-            ostream: _LockedStream = _LockedStream(
+            ostream: Union[ZstdCompressionWriter, IO[bytes]] = (
                 cctx.stream_writer(log) if enable_compression else log
             )
 
@@ -728,7 +702,7 @@ class CLPStreamHandler(CLPBaseHandler):
 
     def init(self, stream: IO[bytes]) -> None:
         self.cctx: ZstdCompressor = ZstdCompressor()
-        self.ostream: _LockedStream = _LockedStream(
+        self.ostream: Union[ZstdCompressionWriter, IO[bytes]] = (
             self.cctx.stream_writer(stream) if self.enable_compression else stream
         )
         self.last_timestamp_ms: int = floor(time.time() * 1000)  # convert to ms and truncate
