@@ -10,7 +10,7 @@ from math import floor
 from pathlib import Path
 from queue import Empty, Queue
 from signal import SIGINT, signal, SIGTERM
-from threading import Thread, Timer
+from threading import RLock, Thread, Timer
 from types import FrameType
 from typing import Any, Callable, ClassVar, Dict, IO, Optional, Tuple, Union
 
@@ -226,9 +226,13 @@ class CLPLogLevelTimeout:
         self.ostream: Optional[Union[ZstdCompressionWriter, IO[bytes]]] = None
         self.hard_timeout_thread: Optional[Timer] = None
         self.soft_timeout_thread: Optional[Timer] = None
+        self.lock: RLock = RLock()
 
     def set_ostream(self, ostream: Union[ZstdCompressionWriter, IO[bytes]]) -> None:
         self.ostream = ostream
+
+    def get_lock(self) -> RLock:
+        return self.lock
 
     def timeout(self) -> None:
         """
@@ -236,6 +240,7 @@ class CLPLogLevelTimeout:
         existing timeout threads are cancelled, `next_hard_timeout_ts` and
         `min_soft_timeout_delta` are reset, and the zstandard frame is flushed.
         """
+        self.get_lock().acquire()
         if self.hard_timeout_thread:
             self.hard_timeout_thread.cancel()
         if self.soft_timeout_thread:
@@ -249,6 +254,7 @@ class CLPLogLevelTimeout:
             else:
                 self.ostream.flush()
         self.timeout_fn()
+        self.get_lock().release()
 
     def update(self, loglevel: int, log_timestamp_ms: int, log_fn: Callable[[str], None]) -> None:
         """
@@ -262,6 +268,7 @@ class CLPLogLevelTimeout:
             allows us to correctly log through the handler itself rather than
             just printing to stdout/stderr.
         """
+        self.get_lock().acquire()
         hard_timeout_delta: int
         if loglevel not in self.hard_timeout_deltas:
             log_fn(
@@ -300,6 +307,7 @@ class CLPLogLevelTimeout:
         self.soft_timeout_thread = Timer(new_soft_timeout_ms / 1000 - time.time(), self.timeout)
         self.soft_timeout_thread.setDaemon(True)
         self.soft_timeout_thread.start()
+        self.get_lock().release()
 
 
 class CLPSockListener:
@@ -454,15 +462,22 @@ class CLPSockListener:
                 if loglevel_timeout:
                     loglevel_timeout.update(loglevel, last_timestamp_ms, log_fn)
                 buf += timestamp_buf
+                if loglevel_timeout:
+                    loglevel_timeout.get_lock().acquire()
                 ostream.write(buf)
+                if loglevel_timeout:
+                    loglevel_timeout.get_lock().release()
             if loglevel_timeout:
                 loglevel_timeout.timeout()
+                loglevel_timeout.get_lock().acquire()
             ostream.write(EOF_CHAR)
 
             if enable_compression:
                 # Since we are not using context manager, the ostream should be
                 # explicitly closed.
                 ostream.close()
+            if loglevel_timeout:
+                loglevel_timeout.get_lock().release()
         # tell _server to exit
         CLPSockListener._signaled = True
         return 0
@@ -740,7 +755,11 @@ class CLPStreamHandler(CLPBaseHandler):
             raise RuntimeError("Stream already closed")
         clp_msg: bytearray
         clp_msg, self.last_timestamp_ms = _encode_log_event(msg, self.last_timestamp_ms)
+        if self.loglevel_timeout:
+            self.loglevel_timeout.get_lock().acquire()
         self.ostream.write(clp_msg)
+        if self.loglevel_timeout:
+            self.loglevel_timeout.get_lock().release()
 
     # override
     def _write(self, loglevel: int, msg: str) -> None:
@@ -750,7 +769,10 @@ class CLPStreamHandler(CLPBaseHandler):
         clp_msg, self.last_timestamp_ms = _encode_log_event(msg, self.last_timestamp_ms)
         if self.loglevel_timeout:
             self.loglevel_timeout.update(loglevel, self.last_timestamp_ms, self._direct_write)
+            self.loglevel_timeout.get_lock().acquire()
         self.ostream.write(clp_msg)
+        if self.loglevel_timeout:
+            self.loglevel_timeout.get_lock().release()
 
     # Added to logging.StreamHandler in python 3.7
     # override
@@ -775,8 +797,11 @@ class CLPStreamHandler(CLPBaseHandler):
     def close(self) -> None:
         if self.loglevel_timeout:
             self.loglevel_timeout.timeout()
+            self.loglevel_timeout.get_lock().acquire()
         self.ostream.write(EOF_CHAR)
         self.ostream.close()
+        if self.loglevel_timeout:
+            self.loglevel_timeout.get_lock().release()
         self.closed = True
         super().close()
 
