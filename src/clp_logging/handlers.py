@@ -315,6 +315,14 @@ class CLPLogLevelTimeout:
 def _get_mutex_context_from_loglevel_timeout(
     loglevel_timeout: Optional[CLPLogLevelTimeout],
 ) -> AbstractContextManager[bool | None]:
+    """
+    Returns a context manager from the lock given by `loglevel_timeout`. If
+    `loglevel_timeout` is `None`, it returns a `nullcontext()` instead.
+
+    :param loglevel_timeout: An optional `CLPLogLevelTimeout` object.
+    :return: The lock from `loglevel_timeout` if it is not `None`,
+        or a `nullcontext()` if it is `None`.
+    """
     return loglevel_timeout.get_lock() if loglevel_timeout else nullcontext()
 
 
