@@ -312,11 +312,13 @@ class CLPLogLevelTimeout:
         self.soft_timeout_thread.start()
 
 
-def _get_mutex_context_from_loglevel_timeout(
-    loglevel_timeout: Optional[CLPLogLevelTimeout],
-) -> AbstractContextManager[Optional[bool]]:
+def _get_mutex_context_from_loglevel_timeout(loglevel_timeout: Optional[CLPLogLevelTimeout]) -> Any:
     """
     Gets a mutual exclusive context manager for IR stream access.
+
+    The return type should be `AbstractContextManager[Optional[bool]]`, but it
+    is annotated as `Any` for backward compatibility, since the generic
+    `AbstractContextManager` is not available before Python 3.9 (#18239).
 
     :param loglevel_timeout: An optional `CLPLogLevelTimeout` object.
     :return: A context manager that either provides the lock from
