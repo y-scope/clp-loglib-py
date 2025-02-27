@@ -5,7 +5,7 @@ import sys
 import time
 import warnings
 from abc import ABCMeta, abstractmethod
-from contextlib import AbstractContextManager, nullcontext
+from contextlib import nullcontext
 from math import floor
 from pathlib import Path
 from queue import Empty, Queue
