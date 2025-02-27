@@ -5,7 +5,7 @@ import sys
 import time
 import warnings
 from abc import ABCMeta, abstractmethod
-from contextlib import nullcontext
+from contextlib import AbstractContextManager, nullcontext
 from math import floor
 from pathlib import Path
 from queue import Empty, Queue
@@ -175,6 +175,11 @@ class CLPLogLevelTimeout:
           the last timeout. Therefore, if we've seen a log level with a low
           delta, that delta will continue to be used to calculate the soft
           timer until a timeout occurs.
+
+    Thread safety:
+        - This class locks any operations on the stream set by `set_ostream`.
+        - Any logging handler with a timeout object should lock the stream
+          operations using the lock return by `get_lock()`.
     """
 
     # delta times in milliseconds
@@ -267,47 +272,50 @@ class CLPLogLevelTimeout:
             allows us to correctly log through the handler itself rather than
             just printing to stdout/stderr.
         """
-        with self.get_lock():
-            hard_timeout_delta: int
-            if loglevel not in self.hard_timeout_deltas:
-                log_fn(
-                    f"{WARN_PREFIX} log level {loglevel} not in self.hard_timeout_deltas; "
-                    "defaulting to _HARD_TIMEOUT_DELTAS[logging.INFO].\n"
-                )
-                hard_timeout_delta = CLPLogLevelTimeout._HARD_TIMEOUT_DELTAS[logging.INFO]
-            else:
-                hard_timeout_delta = self.hard_timeout_deltas[loglevel]
+        hard_timeout_delta: int
+        if loglevel not in self.hard_timeout_deltas:
+            log_fn(
+                f"{WARN_PREFIX} log level {loglevel} not in self.hard_timeout_deltas; defaulting"
+                " to _HARD_TIMEOUT_DELTAS[logging.INFO].\n"
+            )
+            hard_timeout_delta = CLPLogLevelTimeout._HARD_TIMEOUT_DELTAS[logging.INFO]
+        else:
+            hard_timeout_delta = self.hard_timeout_deltas[loglevel]
 
-            new_hard_timeout_ts: int = log_timestamp_ms + hard_timeout_delta
-            if new_hard_timeout_ts < self.next_hard_timeout_ts:
-                if self.hard_timeout_thread:
-                    self.hard_timeout_thread.cancel()
-                self.hard_timeout_thread = Timer(
-                    new_hard_timeout_ts / 1000 - time.time(), self.timeout
-                )
-                self.hard_timeout_thread.setDaemon(True)
-                self.hard_timeout_thread.start()
-                self.next_hard_timeout_ts = new_hard_timeout_ts
+        new_hard_timeout_ts: int = log_timestamp_ms + hard_timeout_delta
+        if new_hard_timeout_ts < self.next_hard_timeout_ts:
+            if self.hard_timeout_thread:
+                self.hard_timeout_thread.cancel()
+            self.hard_timeout_thread = Timer(new_hard_timeout_ts / 1000 - time.time(), self.timeout)
+            self.hard_timeout_thread.setDaemon(True)
+            self.hard_timeout_thread.start()
+            self.next_hard_timeout_ts = new_hard_timeout_ts
 
-            soft_timeout_delta: int
-            if loglevel not in self.soft_timeout_deltas:
-                log_fn(
-                    f"{WARN_PREFIX} log level {loglevel} not in self.soft_timeout_deltas; "
-                    "defaulting to _SOFT_TIMEOUT_DELTAS[logging.INFO].\n"
-                )
-                soft_timeout_delta = CLPLogLevelTimeout._SOFT_TIMEOUT_DELTAS[logging.INFO]
-            else:
-                soft_timeout_delta = self.soft_timeout_deltas[loglevel]
+        soft_timeout_delta: int
+        if loglevel not in self.soft_timeout_deltas:
+            log_fn(
+                f"{WARN_PREFIX} log level {loglevel} not in self.soft_timeout_deltas; defaulting"
+                " to _SOFT_TIMEOUT_DELTAS[logging.INFO].\n"
+            )
+            soft_timeout_delta = CLPLogLevelTimeout._SOFT_TIMEOUT_DELTAS[logging.INFO]
+        else:
+            soft_timeout_delta = self.soft_timeout_deltas[loglevel]
 
-            if soft_timeout_delta < self.min_soft_timeout_delta:
-                self.min_soft_timeout_delta = soft_timeout_delta
+        if soft_timeout_delta < self.min_soft_timeout_delta:
+            self.min_soft_timeout_delta = soft_timeout_delta
 
-            new_soft_timeout_ms: int = log_timestamp_ms + soft_timeout_delta
-            if self.soft_timeout_thread:
-                self.soft_timeout_thread.cancel()
-            self.soft_timeout_thread = Timer(new_soft_timeout_ms / 1000 - time.time(), self.timeout)
-            self.soft_timeout_thread.setDaemon(True)
-            self.soft_timeout_thread.start()
+        new_soft_timeout_ms: int = log_timestamp_ms + soft_timeout_delta
+        if self.soft_timeout_thread:
+            self.soft_timeout_thread.cancel()
+        self.soft_timeout_thread = Timer(new_soft_timeout_ms / 1000 - time.time(), self.timeout)
+        self.soft_timeout_thread.setDaemon(True)
+        self.soft_timeout_thread.start()
+
+
+def _get_mutex_context_from_loglevel_timeout(
+    loglevel_timeout: Optional[CLPLogLevelTimeout],
+) -> AbstractContextManager[bool | None]:
+    return loglevel_timeout.get_lock() if loglevel_timeout else nullcontext()
 
 
 class CLPSockListener:
@@ -459,15 +467,15 @@ class CLPSockListener:
                     timestamp_ms - last_timestamp_ms
                 )
                 last_timestamp_ms = timestamp_ms
-                if loglevel_timeout:
-                    loglevel_timeout.update(loglevel, last_timestamp_ms, log_fn)
                 buf += timestamp_buf
-                with loglevel_timeout.get_lock() if loglevel_timeout else nullcontext():
+                with _get_mutex_context_from_loglevel_timeout(loglevel_timeout):
+                    if loglevel_timeout:
+                        loglevel_timeout.update(loglevel, last_timestamp_ms, log_fn)
                     ostream.write(buf)
             if loglevel_timeout:
                 loglevel_timeout.timeout()
 
-            with loglevel_timeout.get_lock() if loglevel_timeout else nullcontext():
+            with _get_mutex_context_from_loglevel_timeout(loglevel_timeout):
                 ostream.write(EOF_CHAR)
 
                 if enable_compression:
@@ -751,7 +759,7 @@ class CLPStreamHandler(CLPBaseHandler):
             raise RuntimeError("Stream already closed")
         clp_msg: bytearray
         clp_msg, self.last_timestamp_ms = _encode_log_event(msg, self.last_timestamp_ms)
-        with self.loglevel_timeout.get_lock() if self.loglevel_timeout else nullcontext():
+        with _get_mutex_context_from_loglevel_timeout(self.loglevel_timeout):
             self.ostream.write(clp_msg)
 
     # override
@@ -760,9 +768,9 @@ class CLPStreamHandler(CLPBaseHandler):
             raise RuntimeError("Stream already closed")
         clp_msg: bytearray
         clp_msg, self.last_timestamp_ms = _encode_log_event(msg, self.last_timestamp_ms)
-        if self.loglevel_timeout:
-            self.loglevel_timeout.update(loglevel, self.last_timestamp_ms, self._direct_write)
-        with self.loglevel_timeout.get_lock() if self.loglevel_timeout else nullcontext():
+        with _get_mutex_context_from_loglevel_timeout(self.loglevel_timeout):
+            if self.loglevel_timeout:
+                self.loglevel_timeout.update(loglevel, self.last_timestamp_ms, self._direct_write)
             self.ostream.write(clp_msg)
 
     # Added to logging.StreamHandler in python 3.7
@@ -788,7 +796,7 @@ class CLPStreamHandler(CLPBaseHandler):
     def close(self) -> None:
         if self.loglevel_timeout:
             self.loglevel_timeout.timeout()
-        with self.loglevel_timeout.get_lock() if self.loglevel_timeout else nullcontext():
+        with _get_mutex_context_from_loglevel_timeout(self.loglevel_timeout):
             self.ostream.write(EOF_CHAR)
             self.ostream.close()
         self.closed = True
