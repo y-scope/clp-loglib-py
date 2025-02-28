@@ -316,9 +316,9 @@ def _get_mutex_context_from_loglevel_timeout(loglevel_timeout: Optional[CLPLogLe
     """
     Gets a mutual exclusive context manager for IR stream access.
 
-    The return type should be `AbstractContextManager[Optional[bool]]`, but it
-    is annotated as `Any` for backward compatibility, since the generic
-    `AbstractContextManager` is not available before Python 3.9 (#18239).
+    NOTE: The return type should be `AbstractContextManager[Optional[bool]]`,
+    but it is annotated as `Any` to satisfy the linter in Python 3.7 and 3.8,
+    as `AbstractContextManager` was introduced in Python 3.9 (#18239).
 
     :param loglevel_timeout: An optional `CLPLogLevelTimeout` object.
     :return: A context manager that either provides the lock from
