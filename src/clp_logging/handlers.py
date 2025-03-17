@@ -824,6 +824,8 @@ class CLPS3Handler(CLPBaseHandler):
         enable_compression: bool = True,
         timestamp_format: Optional[str] = None,
         timezone: Optional[str] = None,
+        aws_access_key_id: Optional[str] = None,
+        aws_secret_access_key: Optional[str] = None
     ) -> None:
         super().__init__()
         self.closed: bool = False
@@ -841,7 +843,11 @@ class CLPS3Handler(CLPBaseHandler):
         self.remote_folder_path: Optional[str] = None
         self.obj_key: str = self._remote_log_naming(datetime.datetime.now())
         self.s3_resource: boto3.resources.factory.s3.ServiceResource = boto3.resource("s3")
-        self.s3_client: boto3.client = boto3.client("s3")
+        self.s3_client: boto3.client
+        if aws_access_key_id and aws_secret_access_key:
+            self.s3_client = boto3.client("s3", aws_access_key_id, aws_secret_access_key)
+        else:
+           self.s3_client = boto3.client("s3")
         self.buffer_size: int = 1024 * 1024 * 5
         self.uploaded_parts: List[Dict[str, int | str]] = []
         self.upload_index: int = 1
