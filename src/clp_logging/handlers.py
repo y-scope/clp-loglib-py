@@ -841,7 +841,9 @@ class CLPS3Handler(CLPBaseHandler):
 
         self.s3_bucket: str = s3_bucket
         self.remote_folder_path: Optional[str] = None
-        self.obj_key: str = self._remote_log_naming(datetime.datetime.now())
+        self.remote_file_count: int = 0
+        self.start_timestamp: datetime = datetime.datetime.now()
+        self.obj_key: str = self._remote_log_naming(self.start_timestamp)
         self.s3_resource: boto3.resources.factory.s3.ServiceResource = boto3.resource("s3")
         self.s3_client: boto3.client
         if aws_access_key_id and aws_secret_access_key:
@@ -863,11 +865,15 @@ class CLPS3Handler(CLPBaseHandler):
         new_filename: str
         upload_time: str = timestamp.strftime("%Y-%m-%d-%H%M%S")
 
+        file_count: str = ""
+        if self.remote_file_count != 0:
+            file_count = f"-{self.remote_file_count}"
+
         # HARD-CODED TO .clp.zst FOR NOW
         if self.enable_compression:
-            new_filename = f"{self.remote_folder_path}/{upload_time}_log.clp.zst"
+            new_filename = f"{self.remote_folder_path}/{upload_time}_log{file_count}.clp.zst"
         else:
-            new_filename = f"{self.remote_folder_path}/{upload_time}_log.clp"
+            new_filename = f"{self.remote_folder_path}/{upload_time}_log{file_count}.clp"
         return new_filename
 
     # override
@@ -882,6 +888,17 @@ class CLPS3Handler(CLPBaseHandler):
             self.upload_index += 1
             self.local_buffer.seek(0)
             self.local_buffer.truncate(0)
+
+        # Rotate after 10000 parts (limitaion by s3)
+        if self.upload_index > 10000:
+            self.remote_file_count += 1
+            self.obj_key = self._remote_log_naming(self.start_timestamp)
+            self.uploaded_parts = []
+            self.upload_index = 1
+            create_ret = self.s3_client.create_multipart_upload(
+                Bucket=self.s3_bucket, Key=self.obj_key#, ChecksumAlgorithm="SHA256"
+            )
+            self.upload_id = create_ret["UploadId"]
 
     def _flush(self) -> None:
         self.ostream.flush()
