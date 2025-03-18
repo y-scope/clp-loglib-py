@@ -16,9 +16,12 @@ import tzlocal
 from clp_ffi_py.ir import FourByteEncoder
 from zstandard import FLUSH_FRAME, ZstdCompressionWriter, ZstdCompressor
 
-import datetime
-import io
 import boto3
+import base64
+import datetime
+import hashlib
+import io
+
 
 from clp_logging.protocol import (
     BYTE_ORDER,
@@ -856,7 +859,7 @@ class CLPS3Handler(CLPBaseHandler):
         self.uploaded_parts: List[Dict[str, int | str]] = []
         self.upload_index: int = 1
         create_ret: Dict[str, Any] = self.s3_client.create_multipart_upload(
-            Bucket=self.s3_bucket, Key=self.obj_key#, ChecksumAlgorithm="SHA256"
+            Bucket=self.s3_bucket, Key=self.obj_key, ChecksumAlgorithm="SHA256"
         )
         self.upload_id: int = create_ret["UploadId"]
 
@@ -898,7 +901,7 @@ class CLPS3Handler(CLPBaseHandler):
                 self.uploaded_parts = []
                 self.upload_index = 1
                 create_ret = self.s3_client.create_multipart_upload(
-                    Bucket=self.s3_bucket, Key=self.obj_key#, ChecksumAlgorithm="SHA256"
+                    Bucket=self.s3_bucket, Key=self.obj_key, ChecksumAlgorithm="SHA256"
                 )
                 self.upload_id = create_ret["UploadId"]
                 if not self.upload_id:
@@ -914,21 +917,21 @@ class CLPS3Handler(CLPBaseHandler):
         data = self.local_buffer.getvalue()
 
         try:
-            # sha256_checksum: str = self._calculate_part_sha256(upload_data)
+            sha256_checksum: str = base64.b64encode(hashlib.sha256(data).digest()).decode('utf-8')
             response: Dict[str, Any] = self.s3_client.upload_part(
                 Bucket=self.s3_bucket,
                 Key=self.obj_key,
                 Body=data,
                 PartNumber=self.upload_index,
                 UploadId=self.upload_id,
-                # ChecksumSHA256=sha256_checksum,
+                ChecksumSHA256=sha256_checksum,
             )
 
             # Store both ETag and SHA256 for validation
             upload_status: Dict[str, int | str] = {
                 "PartNumber": self.upload_index,
                 "ETag": response["ETag"],
-                # "ChecksumSHA256": response["ChecksumSHA256"],
+                "ChecksumSHA256": response["ChecksumSHA256"],
             }
 
             # Determine the part to which the new upload_status belongs
@@ -952,7 +955,6 @@ class CLPS3Handler(CLPBaseHandler):
         self.local_buffer.truncate(0)
 
         try:
-            print(self.uploaded_parts)
             self.s3_client.complete_multipart_upload(
                 Bucket=self.s3_bucket,
                 Key=self.obj_key,
@@ -962,7 +964,7 @@ class CLPS3Handler(CLPBaseHandler):
                         {
                             "PartNumber": part["PartNumber"],
                             "ETag": part["ETag"],
-                            # "ChecksumSHA256": part["ChecksumSHA256"],
+                            "ChecksumSHA256": part["ChecksumSHA256"],
                         }
                         for part in self.uploaded_parts
                     ]
