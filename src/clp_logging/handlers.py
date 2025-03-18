@@ -16,8 +16,9 @@ import tzlocal
 from clp_ffi_py.ir import FourByteEncoder
 from zstandard import FLUSH_FRAME, ZstdCompressionWriter, ZstdCompressor
 
-import boto3
 import base64
+import boto3
+import botocore
 import datetime
 import hashlib
 import io
@@ -849,12 +850,17 @@ class CLPS3Handler(CLPBaseHandler):
         self.start_timestamp: datetime = datetime.datetime.now()
         self.obj_key: str = self._remote_log_naming(self.start_timestamp)
         self.s3_resource: boto3.resources.factory.s3.ServiceResource = boto3.resource("s3")
-        self.s3_client: boto3.client = boto3.client(
-            "s3",
-            aws_access_key_id=aws_access_key_id,
-            aws_secret_access_key=aws_secret_access_key
-        ) if aws_access_key_id and aws_secret_access_key else boto3.client("s3")
-        self.buffer_size: int = 1024 * 1024 * 5
+        try:
+            self.s3_client = boto3.client(
+                "s3",
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key
+            ) if aws_access_key_id and aws_secret_access_key else boto3.client("s3")
+        except botocore.exceptions.NoCredentialsError:
+            raise RuntimeError("AWS credentials not found. Please configure your credentials.")
+        except botocore.exceptions.ClientError as e:
+            raise RuntimeError(f"Failed to initialize AWS client: {e}")
+        self.buffer_size: int = 1024 * 1024 * 0.5
         self.part_limit: int = part_limit if part_limit else 10000
         self.uploaded_parts: List[Dict[str, int | str]] = []
         self.upload_index: int = 1
@@ -862,6 +868,8 @@ class CLPS3Handler(CLPBaseHandler):
             Bucket=self.s3_bucket, Key=self.obj_key, ChecksumAlgorithm="SHA256"
         )
         self.upload_id: int = create_ret["UploadId"]
+        if not self.upload_id or not isinstance(self.upload_id, str):
+            raise RuntimeError("Failed to obtain a valid Upload ID from S3.")
 
 
     def _remote_log_naming(self, timestamp: datetime.datetime) -> str:
@@ -926,6 +934,9 @@ class CLPS3Handler(CLPBaseHandler):
                 UploadId=self.upload_id,
                 ChecksumSHA256=sha256_checksum,
             )
+
+            if response["ChecksumSHA256"] != sha256_checksum:
+                raise ValueError(f"Checksum mismatch for part {self.upload_index}. Upload aborted.")
 
             # Store both ETag and SHA256 for validation
             upload_status: Dict[str, int | str] = {
