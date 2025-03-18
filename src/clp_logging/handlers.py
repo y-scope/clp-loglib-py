@@ -846,11 +846,11 @@ class CLPS3Handler(CLPBaseHandler):
         self.start_timestamp: datetime = datetime.datetime.now()
         self.obj_key: str = self._remote_log_naming(self.start_timestamp)
         self.s3_resource: boto3.resources.factory.s3.ServiceResource = boto3.resource("s3")
-        self.s3_client: boto3.client
-        if aws_access_key_id and aws_secret_access_key:
-            self.s3_client = boto3.client("s3", aws_access_key_id, aws_secret_access_key)
-        else:
-           self.s3_client = boto3.client("s3")
+        self.s3_client: boto3.client = boto3.client(
+            "s3",
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key
+        ) if aws_access_key_id and aws_secret_access_key else boto3.client("s3")
         self.buffer_size: int = 1024 * 1024 * 5
         self.part_limit: int = part_limit if part_limit else 10000
         self.uploaded_parts: List[Dict[str, int | str]] = []
