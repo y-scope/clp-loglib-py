@@ -825,7 +825,8 @@ class CLPS3Handler(CLPBaseHandler):
         timestamp_format: Optional[str] = None,
         timezone: Optional[str] = None,
         aws_access_key_id: Optional[str] = None,
-        aws_secret_access_key: Optional[str] = None
+        aws_secret_access_key: Optional[str] = None,
+        part_limit: Optional[int] = None
     ) -> None:
         super().__init__()
         self.closed: bool = False
@@ -851,6 +852,7 @@ class CLPS3Handler(CLPBaseHandler):
         else:
            self.s3_client = boto3.client("s3")
         self.buffer_size: int = 1024 * 1024 * 5
+        self.part_limit: int = part_limit if part_limit else 10000
         self.uploaded_parts: List[Dict[str, int | str]] = []
         self.upload_index: int = 1
         create_ret: Dict[str, Any] = self.s3_client.create_multipart_upload(
@@ -885,20 +887,27 @@ class CLPS3Handler(CLPBaseHandler):
         self.ostream.write(clp_msg)
         self._flush()
         if self.local_buffer.tell() >= self.buffer_size:
-            self.upload_index += 1
-            self.local_buffer.seek(0)
-            self.local_buffer.truncate(0)
+            # Rotate after 10000 parts (limitaion by s3)
+            if self.upload_index >= self.part_limit:
+                self._complete_upload()
+                self.ostream.close()
+                self.local_buffer = io.BytesIO()
+                self.init(self.local_buffer)
+                self.remote_file_count += 1
+                self.obj_key = self._remote_log_naming(self.start_timestamp)
+                self.uploaded_parts = []
+                self.upload_index = 1
+                create_ret = self.s3_client.create_multipart_upload(
+                    Bucket=self.s3_bucket, Key=self.obj_key#, ChecksumAlgorithm="SHA256"
+                )
+                self.upload_id = create_ret["UploadId"]
+                if not self.upload_id:
+                    raise RuntimeError("Failed to initialize new upload ID.")
+            else:
+                self.upload_index += 1
+                self.local_buffer.seek(0)
+                self.local_buffer.truncate(0)
 
-        # Rotate after 10000 parts (limitaion by s3)
-        if self.upload_index > 10000:
-            self.remote_file_count += 1
-            self.obj_key = self._remote_log_naming(self.start_timestamp)
-            self.uploaded_parts = []
-            self.upload_index = 1
-            create_ret = self.s3_client.create_multipart_upload(
-                Bucket=self.s3_bucket, Key=self.obj_key#, ChecksumAlgorithm="SHA256"
-            )
-            self.upload_id = create_ret["UploadId"]
 
     def _flush(self) -> None:
         self.ostream.flush()
@@ -936,9 +945,7 @@ class CLPS3Handler(CLPBaseHandler):
                 f'Multipart Upload on Part {self.upload_index}: {e}'
             ) from e
 
-
-    # override
-    def close(self) -> None:
+    def _complete_upload(self) -> None:
         self.ostream.write(EOF_CHAR)
         self._flush()
         self.local_buffer.seek(0)
@@ -968,7 +975,10 @@ class CLPS3Handler(CLPBaseHandler):
             raise Exception(
                 f'Multipart Upload on Part {self.upload_index}: {e}'
             ) from e
-        finally:
-            self.ostream.close()
-            self.closed = True
-            super().close()
+
+    # override
+    def close(self) -> None:
+        self._complete_upload()
+        self.ostream.close()
+        self.closed = True
+        super().close()
