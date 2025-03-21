@@ -836,7 +836,8 @@ class CLPS3Handler(CLPBaseHandler):
         aws_access_key_id: Optional[str] = None,
         aws_secret_access_key: Optional[str] = None,
         max_part_num: Optional[int] = None,
-        upload_part_size: Optional[int] = MIN_UPLOAD_PART_SIZE
+        upload_part_size: Optional[int] = MIN_UPLOAD_PART_SIZE,
+        s3_directory: Optional[str] = None
     ) -> None:
         super().__init__()
         self.closed: bool = False
@@ -854,7 +855,8 @@ class CLPS3Handler(CLPBaseHandler):
         self.remote_folder_path: Optional[str] = None
         self.remote_file_count: int = 1
         self.start_timestamp: datetime = datetime.datetime.now()
-        self.obj_key: str = self._remote_log_naming(self.start_timestamp)
+        self.s3_directory: str = (s3_directory.rstrip('/') + '/') if s3_directory else ''
+        self.obj_key: str = self._remote_log_naming()
         self.s3_resource: boto3.resources.factory.s3.ServiceResource = boto3.resource("s3")
         try:
             self.s3_client = boto3.client(
@@ -886,11 +888,11 @@ class CLPS3Handler(CLPBaseHandler):
             raise RuntimeError("Failed to obtain a valid Upload ID from S3.")
 
 
-    def _remote_log_naming(self, timestamp: datetime.datetime) -> str:
-        self.remote_folder_path: str = f"logs/{timestamp.year}/{timestamp.month}/{timestamp.day}"
+    def _remote_log_naming(self) -> str:
+        self.remote_folder_path: str = f"{self.s3_directory}{self.start_timestamp.year}/{self.start_timestamp.month}/{self.start_timestamp.day}"
 
         new_filename: str
-        upload_time: str = str(int(timestamp.timestamp()))
+        upload_time: str = str(int(self.start_timestamp.timestamp()))
 
         file_count: str = f"-{self.remote_file_count}"
 
@@ -917,7 +919,7 @@ class CLPS3Handler(CLPBaseHandler):
                 self.local_buffer = io.BytesIO()
                 self.init(self.local_buffer)
                 self.remote_file_count += 1
-                self.obj_key = self._remote_log_naming(self.start_timestamp)
+                self.obj_key = self._remote_log_naming()
                 self.uploaded_parts = []
                 self.upload_index = 1
                 create_ret = self.s3_client.create_multipart_upload(
