@@ -40,6 +40,11 @@ from clp_logging.protocol import (
 DEFAULT_LOG_FORMAT: str = " %(levelname)s %(name)s %(message)s"
 WARN_PREFIX: str = " [WARN][clp_logging]"
 
+# Define the multipart upload size limits
+MIN_UPLOAD_PART_SIZE = 5 * 1024 * 1024  # 5 MB
+MAX_UPLOAD_PART_SIZE = 5 * 1024 * 1024 * 1024  # 5 GB
+MAX_PART_NUM_PER_UPLOAD = 10000
+
 
 def _init_timeinfo(fmt: Optional[str], tz: Optional[str]) -> Tuple[str, str]:
     """
@@ -830,7 +835,8 @@ class CLPS3Handler(CLPBaseHandler):
         timezone: Optional[str] = None,
         aws_access_key_id: Optional[str] = None,
         aws_secret_access_key: Optional[str] = None,
-        part_limit: Optional[int] = None
+        max_part_num: Optional[int] = None,
+        upload_part_size: Optional[int] = MIN_UPLOAD_PART_SIZE
     ) -> None:
         super().__init__()
         self.closed: bool = False
@@ -860,8 +866,16 @@ class CLPS3Handler(CLPBaseHandler):
             raise RuntimeError("AWS credentials not found. Please configure your credentials.")
         except botocore.exceptions.ClientError as e:
             raise RuntimeError(f"Failed to initialize AWS client: {e}")
-        self.buffer_size: int = 1024 * 1024 * 0.5
-        self.part_limit: int = part_limit if part_limit else 10000
+
+        self.upload_part_size: int
+        if MIN_UPLOAD_PART_SIZE <= upload_part_size <= MAX_UPLOAD_PART_SIZE:
+            self.upload_part_size = upload_part_size
+        else:
+            raise RuntimeError(
+                f"Invalid upload_part_size: {upload_part_size}. "
+                f"It must be between {MIN_UPLOAD_PART_SIZE} and {MAX_UPLOAD_PART_SIZE}."
+            )
+        self.max_part_num: int = max_part_num if max_part_num else MAX_PART_NUM_PER_UPLOAD
         self.uploaded_parts: List[Dict[str, int | str]] = []
         self.upload_index: int = 1
         create_ret: Dict[str, Any] = self.s3_client.create_multipart_upload(
@@ -897,9 +911,9 @@ class CLPS3Handler(CLPBaseHandler):
         clp_msg, self.last_timestamp_ms = _encode_log_event(msg, self.last_timestamp_ms)
         self.ostream.write(clp_msg)
         self._flush()
-        if self.local_buffer.tell() >= self.buffer_size:
-            # Rotate after 10000 parts (limitaion by s3)
-            if self.upload_index >= self.part_limit:
+        if self.local_buffer.tell() >= self.upload_part_size:
+            # Rotate after maximum number of parts
+            if self.upload_index >= self.max_part_num:
                 self._complete_upload()
                 self.ostream.close()
                 self.local_buffer = io.BytesIO()
