@@ -890,7 +890,7 @@ class CLPS3Handler(CLPBaseHandler):
         self.remote_folder_path: str = f"logs/{timestamp.year}/{timestamp.month}/{timestamp.day}"
 
         new_filename: str
-        upload_time: str = timestamp.strftime("%Y-%m-%d-%H%M%S")
+        upload_time: str = str(int(timestamp.timestamp()))
 
         file_count: str = f"-{self.remote_file_count}"
 
