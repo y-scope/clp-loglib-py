@@ -852,7 +852,7 @@ class CLPS3Handler(CLPBaseHandler):
 
         self.s3_bucket: str = s3_bucket
         self.remote_folder_path: Optional[str] = None
-        self.remote_file_count: int = 0
+        self.remote_file_count: int = 1
         self.start_timestamp: datetime = datetime.datetime.now()
         self.obj_key: str = self._remote_log_naming(self.start_timestamp)
         self.s3_resource: boto3.resources.factory.s3.ServiceResource = boto3.resource("s3")
@@ -892,9 +892,7 @@ class CLPS3Handler(CLPBaseHandler):
         new_filename: str
         upload_time: str = timestamp.strftime("%Y-%m-%d-%H%M%S")
 
-        file_count: str = ""
-        if self.remote_file_count != 0:
-            file_count = f"-{self.remote_file_count}"
+        file_count: str = f"-{self.remote_file_count}"
 
         # HARD-CODED TO .clp.zst FOR NOW
         if self.enable_compression:
