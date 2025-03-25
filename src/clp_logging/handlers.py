@@ -814,18 +814,6 @@ class CLPS3Handler(CLPBaseHandler):
     :param s3_bucket: S3 bucket to upload CLP encoded log messages to
     """
 
-    def init(self, stream: IO[bytes]) -> None:
-        self.cctx: ZstdCompressor = ZstdCompressor()
-        self._ostream: Union[ZstdCompressionWriter, IO[bytes]] = (
-            self.cctx.stream_writer(self._local_buffer) if self.enable_compression else stream
-        )
-        self.last_timestamp_ms: int = floor(time.time() * 1000)  # convert to ms and truncate
-        self._ostream.write(
-            FourByteEncoder.encode_preamble(
-                self.last_timestamp_ms, self.timestamp_format, self.timezone
-            )
-        )
-
     def __init__(
         self,
         s3_bucket: str,
@@ -849,7 +837,7 @@ class CLPS3Handler(CLPBaseHandler):
         self.timestamp_format: str
         self.timezone: str
         self.timestamp_format, self.timezone = _init_timeinfo(timestamp_format, timezone)
-        self.init(stream)
+        self._init_stream(stream)
 
         self.s3_bucket: str = s3_bucket
         self._remote_folder_path: Optional[str] = None
@@ -886,6 +874,17 @@ class CLPS3Handler(CLPBaseHandler):
         if not self._upload_id or not isinstance(self._upload_id, str):
             raise RuntimeError("Failed to obtain a valid Upload ID from S3.")
 
+    def _init_stream(self, stream: IO[bytes]) -> None:
+        self.cctx: ZstdCompressor = ZstdCompressor()
+        self._ostream: Union[ZstdCompressionWriter, IO[bytes]] = (
+            self.cctx.stream_writer(self._local_buffer) if self.enable_compression else stream
+        )
+        self.last_timestamp_ms: int = floor(time.time() * 1000)  # convert to ms and truncate
+        self._ostream.write(
+            FourByteEncoder.encode_preamble(
+                self.last_timestamp_ms, self.timestamp_format, self.timezone
+            )
+        )
 
     def _remote_log_naming(self) -> str:
         self._remote_folder_path: str = f"{self.s3_directory}{self._start_timestamp.year}/{self._start_timestamp.month}/{self._start_timestamp.day}"
@@ -914,9 +913,8 @@ class CLPS3Handler(CLPBaseHandler):
             # Rotate after maximum number of parts
             if self._upload_index >= self.max_part_num:
                 self._complete_upload()
-                self._ostream.close()
                 self._local_buffer = io.BytesIO()
-                self.init(self._local_buffer)
+                self._init_stream(self._local_buffer)
                 self._remote_file_count += 1
                 self._obj_key = self._remote_log_naming()
                 self._uploaded_parts = []
@@ -935,10 +933,10 @@ class CLPS3Handler(CLPBaseHandler):
 
     def _flush(self) -> None:
         self._ostream.flush()
-        data = self._local_buffer.getvalue()
+        data: bytes = self._local_buffer.getvalue()
+        sha256_checksum: str = base64.b64encode(hashlib.sha256(data).digest()).decode('utf-8')
 
         try:
-            sha256_checksum: str = base64.b64encode(hashlib.sha256(data).digest()).decode('utf-8')
             response: Dict[str, Any] = self._s3_client.upload_part(
                 Bucket=self.s3_bucket,
                 Key=self._obj_key,
@@ -1002,9 +1000,10 @@ class CLPS3Handler(CLPBaseHandler):
                 f'Multipart Upload on Part {self._upload_index}: {e}'
             ) from e
 
+        self._ostream.close()
+
     # override
     def close(self) -> None:
         self._complete_upload()
-        self._ostream.close()
         self.closed = True
         super().close()
