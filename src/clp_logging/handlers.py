@@ -1012,14 +1012,32 @@ class ClpKeyValuePairStreamHandler(logging.Handler):
             serialize_dict_to_msgpack(auto_gen_kv_pairs),
             serialize_dict_to_msgpack(user_gen_kv_pairs),
         )
-        
-        
+
 
 class CLPS3Handler(CLPBaseHandler):
     """
     Log is written to stream in CLP IR encoding, and uploaded to s3_bucket
 
     :param s3_bucket: S3 bucket to upload CLP encoded log messages to
+    :param stream: Target stream to write log messages to
+    :param enable_compression: Option to enable/disable stream compression
+    :param timestamp_format: Timestamp format written in preamble to be
+        used when generating the logs with a reader.
+    :param timezone: Timezone written in preamble to be used when
+        generating the timestamp from Unix epoch time.
+    :param aws_access_key_id: User's public access key for the S3 bucket.
+    :param aws_secret_access_key: User's private access key for the S3 bucket.
+    :param s3_directory: S3 remote directory to upload objects to.
+    :param use_multipart_upload: Option to use multipart upload to upload
+        stream segments or use PutObject to upload the entire buffer.
+    :param max_part_num: Maximum number of parts allowed for a multipart upload
+        session before uploading to a new object.
+    :param upload_part_size: Maximum size of a part in a multipart upload
+        session before writing to a new part.
+    """
+
+    def __init__(
+        self,
         s3_bucket: str,
         stream: Optional[IO[bytes]] = None,
         enable_compression: bool = True,
@@ -1027,10 +1045,10 @@ class CLPS3Handler(CLPBaseHandler):
         timezone: Optional[str] = None,
         aws_access_key_id: Optional[str] = None,
         aws_secret_access_key: Optional[str] = None,
-        max_part_num: Optional[int] = None,
-        upload_part_size: Optional[int] = MIN_UPLOAD_PART_SIZE,
         s3_directory: Optional[str] = None,
-        use_multipart_upload: Optional[bool] = True
+        use_multipart_upload: Optional[bool] = True,
+        max_part_num: Optional[int] = None,
+        upload_part_size: Optional[int] = MIN_UPLOAD_PART_SIZE
     ) -> None:
         super().__init__()
         self.closed: bool = False
@@ -1044,7 +1062,8 @@ class CLPS3Handler(CLPBaseHandler):
         self.timestamp_format, self.timezone = _init_timeinfo(timestamp_format, timezone)
         self._init_stream(stream)
 
-
+        # Configure s3-related variables
+        self.s3_bucket: str = s3_bucket
         try:
             self._s3_client = boto3.client(
                 "s3",
@@ -1055,7 +1074,6 @@ class CLPS3Handler(CLPBaseHandler):
             raise RuntimeError("AWS credentials not found. Please configure your credentials.")
         except botocore.exceptions.ClientError as e:
             raise RuntimeError(f"Failed to initialize AWS client: {e}")
-        self.s3_bucket: str = s3_bucket
         self._remote_folder_path: Optional[str] = None
         self._remote_file_count: int = 1
         self._start_timestamp: datetime = datetime.datetime.now()
@@ -1064,6 +1082,7 @@ class CLPS3Handler(CLPBaseHandler):
 
         self.use_multipart_upload = use_multipart_upload
         if self.use_multipart_upload:
+            # Configure size limit of a part in multipart upload
             self.upload_part_size: int
             if MIN_UPLOAD_PART_SIZE <= upload_part_size <= MAX_UPLOAD_PART_SIZE:
                 self.upload_part_size = upload_part_size
@@ -1083,6 +1102,11 @@ class CLPS3Handler(CLPBaseHandler):
                 raise RuntimeError("Failed to obtain a valid Upload ID from S3.")
 
     def _init_stream(self, stream: IO[bytes]) -> None:
+        """
+        Initialize and configure output stream
+
+        :param stream: Target stream to write log messages to
+        """
         self.cctx: ZstdCompressor = ZstdCompressor()
         self._ostream: Union[ZstdCompressionWriter, IO[bytes]] = (
             self.cctx.stream_writer(self._local_buffer) if self.enable_compression else stream
@@ -1095,6 +1119,9 @@ class CLPS3Handler(CLPBaseHandler):
         )
 
     def _remote_log_naming(self) -> str:
+        """
+        Set the name of the target S3 object key to upload to
+        """
         self._remote_folder_path: str = f"{self.s3_directory}{self._start_timestamp.year}/{self._start_timestamp.month}/{self._start_timestamp.day}"
 
         new_filename: str
@@ -1102,7 +1129,7 @@ class CLPS3Handler(CLPBaseHandler):
 
         file_count: str = f"-{self._remote_file_count}"
 
-        # HARD-CODED TO .clp.zst FOR NOW
+        # Compression uses zstd format
         if self.enable_compression:
             new_filename = f"{self._remote_folder_path}/{upload_time}_log{file_count}.clp.zst"
         else:
@@ -1111,18 +1138,26 @@ class CLPS3Handler(CLPBaseHandler):
 
     # override
     def _write(self, loglevel: int, msg: str) -> None:
+        """
+        Write the log message stream into a local buffer.
+        (With use_multipart_upload) Update the part number if the local buffer
+        exceeds a predetermined buffer size. Then clear the local buffer.
+        """
         if self.closed:
             raise RuntimeError("Stream already closed")
         clp_msg: bytearray
         clp_msg, self.last_timestamp_ms = _encode_log_event(msg, self.last_timestamp_ms)
+
+        # Write log stream to a local buffer and flush to upload
         self._ostream.write(clp_msg)
         if not self.use_multipart_upload:
             self._ostream.write(EOF_CHAR)
         self._flush()
+
         if self.use_multipart_upload and self._local_buffer.tell() >= self.upload_part_size:
             # Rotate after maximum number of parts
             if self._upload_index >= self.max_part_num:
-                self._complete_upload()
+                self._complete_multipart_upload()
                 self._ostream.close()
                 self._local_buffer = io.BytesIO()
                 self._init_stream(self._local_buffer)
@@ -1143,6 +1178,10 @@ class CLPS3Handler(CLPBaseHandler):
 
 
     def _flush(self) -> None:
+        """
+        Upload local buffer to the S3 bucket using upload_part if
+        use_multipart_upload = True, otherwise use put_object.
+        """
         self._ostream.flush()
         data: bytes = self._local_buffer.getvalue()
         sha256_checksum: str = base64.b64encode(hashlib.sha256(data).digest()).decode('utf-8')
@@ -1158,6 +1197,7 @@ class CLPS3Handler(CLPBaseHandler):
                     ChecksumSHA256=sha256_checksum,
                 )
 
+                # Verify integrity of the uploaded part using SHA256 Checksum
                 if response["ChecksumSHA256"] != sha256_checksum:
                     raise ValueError(f"Checksum mismatch for part {self._upload_index}. Upload aborted.")
 
@@ -1191,10 +1231,21 @@ class CLPS3Handler(CLPBaseHandler):
                     ContentEncoding='zstd' if self.enable_compression else 'binary',
                     ChecksumSHA256=sha256_checksum
                 )
+
+                # Verify integrity of the upload using SHA256 Checksum
+                response = self.s3_client.head_object(Bucket=self.s3_bucket, Key=self.obj_key)
+                if 'ChecksumSHA256' in response:
+                    s3_checksum = response['ChecksumSHA256']
+                    if s3_checksum != sha256_checksum:
+                        raise ValueError(f"Checksum mismatch. Upload aborted.")
+
             except Exception as e:
                 raise Exception(f'Failed to upload using PutObject: {e}')
 
-    def _complete_upload(self) -> None:
+    def _complete_multipart_upload(self) -> None:
+        """
+        Complete a multipart upload session and clear the local buffer.
+        """
         self._ostream.write(EOF_CHAR)
         self._flush()
         self._local_buffer.seek(0)
@@ -1226,8 +1277,11 @@ class CLPS3Handler(CLPBaseHandler):
 
     # override
     def close(self) -> None:
+        """
+        Complete the upload if needed. Close the stream and the handler.
+        """
         if self.use_multipart_upload:
-            self._complete_upload()
+            self._complete_multipart_upload()
         self._ostream.close()
         self.closed = True
         super().close()
