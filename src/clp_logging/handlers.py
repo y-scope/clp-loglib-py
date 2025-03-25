@@ -825,7 +825,8 @@ class CLPS3Handler(CLPBaseHandler):
         aws_secret_access_key: Optional[str] = None,
         max_part_num: Optional[int] = None,
         upload_part_size: Optional[int] = MIN_UPLOAD_PART_SIZE,
-        s3_directory: Optional[str] = None
+        s3_directory: Optional[str] = None,
+        use_multipart_upload: Optional[bool] = True
     ) -> None:
         super().__init__()
         self.closed: bool = False
@@ -839,12 +840,7 @@ class CLPS3Handler(CLPBaseHandler):
         self.timestamp_format, self.timezone = _init_timeinfo(timestamp_format, timezone)
         self._init_stream(stream)
 
-        self.s3_bucket: str = s3_bucket
-        self._remote_folder_path: Optional[str] = None
-        self._remote_file_count: int = 1
-        self._start_timestamp: datetime = datetime.datetime.now()
-        self.s3_directory: str = (s3_directory.rstrip('/') + '/') if s3_directory else ''
-        self._obj_key: str = self._remote_log_naming()
+
         try:
             self._s3_client = boto3.client(
                 "s3",
@@ -855,24 +851,32 @@ class CLPS3Handler(CLPBaseHandler):
             raise RuntimeError("AWS credentials not found. Please configure your credentials.")
         except botocore.exceptions.ClientError as e:
             raise RuntimeError(f"Failed to initialize AWS client: {e}")
+        self.s3_bucket: str = s3_bucket
+        self._remote_folder_path: Optional[str] = None
+        self._remote_file_count: int = 1
+        self._start_timestamp: datetime = datetime.datetime.now()
+        self.s3_directory: str = (s3_directory.rstrip('/') + '/') if s3_directory else ''
+        self._obj_key: str = self._remote_log_naming()
 
-        self.upload_part_size: int
-        if MIN_UPLOAD_PART_SIZE <= upload_part_size <= MAX_UPLOAD_PART_SIZE:
-            self.upload_part_size = upload_part_size
-        else:
-            raise RuntimeError(
-                f"Invalid upload_part_size: {upload_part_size}. "
-                f"It must be between {MIN_UPLOAD_PART_SIZE} and {MAX_UPLOAD_PART_SIZE}."
+        self.use_multipart_upload = use_multipart_upload
+        if self.use_multipart_upload:
+            self.upload_part_size: int
+            if MIN_UPLOAD_PART_SIZE <= upload_part_size <= MAX_UPLOAD_PART_SIZE:
+                self.upload_part_size = upload_part_size
+            else:
+                raise RuntimeError(
+                    f"Invalid upload_part_size: {upload_part_size}. "
+                    f"It must be between {MIN_UPLOAD_PART_SIZE} and {MAX_UPLOAD_PART_SIZE}."
+                )
+            self.max_part_num: int = max_part_num if max_part_num else MAX_PART_NUM_PER_UPLOAD
+            self._uploaded_parts: List[Dict[str, int | str]] = []
+            self._upload_index: int = 1
+            create_ret: Dict[str, Any] = self._s3_client.create_multipart_upload(
+                Bucket=self.s3_bucket, Key=self._obj_key, ChecksumAlgorithm="SHA256"
             )
-        self.max_part_num: int = max_part_num if max_part_num else MAX_PART_NUM_PER_UPLOAD
-        self._uploaded_parts: List[Dict[str, int | str]] = []
-        self._upload_index: int = 1
-        create_ret: Dict[str, Any] = self._s3_client.create_multipart_upload(
-            Bucket=self.s3_bucket, Key=self._obj_key, ChecksumAlgorithm="SHA256"
-        )
-        self._upload_id: int = create_ret["UploadId"]
-        if not self._upload_id or not isinstance(self._upload_id, str):
-            raise RuntimeError("Failed to obtain a valid Upload ID from S3.")
+            self._upload_id: int = create_ret["UploadId"]
+            if not self._upload_id or not isinstance(self._upload_id, str):
+                raise RuntimeError("Failed to obtain a valid Upload ID from S3.")
 
     def _init_stream(self, stream: IO[bytes]) -> None:
         self.cctx: ZstdCompressor = ZstdCompressor()
@@ -908,11 +912,14 @@ class CLPS3Handler(CLPBaseHandler):
         clp_msg: bytearray
         clp_msg, self.last_timestamp_ms = _encode_log_event(msg, self.last_timestamp_ms)
         self._ostream.write(clp_msg)
+        if not self.use_multipart_upload:
+            self._ostream.write(EOF_CHAR)
         self._flush()
-        if self._local_buffer.tell() >= self.upload_part_size:
+        if self.use_multipart_upload and self._local_buffer.tell() >= self.upload_part_size:
             # Rotate after maximum number of parts
             if self._upload_index >= self.max_part_num:
                 self._complete_upload()
+                self._ostream.close()
                 self._local_buffer = io.BytesIO()
                 self._init_stream(self._local_buffer)
                 self._remote_file_count += 1
@@ -936,39 +943,52 @@ class CLPS3Handler(CLPBaseHandler):
         data: bytes = self._local_buffer.getvalue()
         sha256_checksum: str = base64.b64encode(hashlib.sha256(data).digest()).decode('utf-8')
 
-        try:
-            response: Dict[str, Any] = self._s3_client.upload_part(
-                Bucket=self.s3_bucket,
-                Key=self._obj_key,
-                Body=data,
-                PartNumber=self._upload_index,
-                UploadId=self._upload_id,
-                ChecksumSHA256=sha256_checksum,
-            )
+        if self.use_multipart_upload:
+            try:
+                response: Dict[str, Any] = self._s3_client.upload_part(
+                    Bucket=self.s3_bucket,
+                    Key=self._obj_key,
+                    Body=data,
+                    PartNumber=self._upload_index,
+                    UploadId=self._upload_id,
+                    ChecksumSHA256=sha256_checksum,
+                )
 
-            if response["ChecksumSHA256"] != sha256_checksum:
-                raise ValueError(f"Checksum mismatch for part {self._upload_index}. Upload aborted.")
+                if response["ChecksumSHA256"] != sha256_checksum:
+                    raise ValueError(f"Checksum mismatch for part {self._upload_index}. Upload aborted.")
 
-            # Store both ETag and SHA256 for validation
-            upload_status: Dict[str, int | str] = {
-                "PartNumber": self._upload_index,
-                "ETag": response["ETag"],
-                "ChecksumSHA256": response["ChecksumSHA256"],
-            }
+                # Store both ETag and SHA256 for validation
+                upload_status: Dict[str, int | str] = {
+                    "PartNumber": self._upload_index,
+                    "ETag": response["ETag"],
+                    "ChecksumSHA256": response["ChecksumSHA256"],
+                }
 
-            # Determine the part to which the new upload_status belongs
-            if len(self._uploaded_parts) > self._upload_index - 1:
-                self._uploaded_parts[self._upload_index-1] = upload_status
-            else:
-                self._uploaded_parts.append(upload_status)
+                # Determine the part to which the new upload_status belongs
+                if len(self._uploaded_parts) > self._upload_index - 1:
+                    self._uploaded_parts[self._upload_index-1] = upload_status
+                else:
+                    self._uploaded_parts.append(upload_status)
 
-        except Exception as e:
-            self._s3_client.abort_multipart_upload(
-                Bucket=self.s3_bucket, Key=self._obj_key, UploadId=self._upload_id
-            )
-            raise Exception(
-                f'Multipart Upload on Part {self._upload_index}: {e}'
-            ) from e
+            except Exception as e:
+                self._s3_client.abort_multipart_upload(
+                    Bucket=self.s3_bucket, Key=self._obj_key, UploadId=self._upload_id
+                )
+                raise Exception(
+                    f'Multipart Upload on Part {self._upload_index}: {e}'
+                ) from e
+        else:
+            self._ostream.write(EOF_CHAR)
+            try:
+                self._s3_client.put_object(
+                    Bucket=self.s3_bucket,
+                    Key=self._obj_key,
+                    Body=data,
+                    ContentEncoding='zstd' if self.enable_compression else 'binary',
+                    ChecksumSHA256=sha256_checksum
+                )
+            except Exception as e:
+                raise Exception(f'Failed to upload using PutObject: {e}')
 
     def _complete_upload(self) -> None:
         self._ostream.write(EOF_CHAR)
@@ -1000,10 +1020,10 @@ class CLPS3Handler(CLPBaseHandler):
                 f'Multipart Upload on Part {self._upload_index}: {e}'
             ) from e
 
-        self._ostream.close()
-
     # override
     def close(self) -> None:
-        self._complete_upload()
+        if self.use_multipart_upload:
+            self._complete_upload()
+        self._ostream.close()
         self.closed = True
         super().close()
