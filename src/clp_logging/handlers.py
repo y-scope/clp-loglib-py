@@ -1235,7 +1235,10 @@ class CLPS3Handler(CLPBaseHandler):
                 )
 
                 # Verify integrity of the upload using SHA256 Checksum
-                response: Dict[str, Any] = self._s3_client.head_object(Bucket=self.s3_bucket, Key=self.obj_key)
+                response: Dict[str, Any] = self._s3_client.head_object(
+                    Bucket=self.s3_bucket,
+                    Key=self._obj_key
+                )
                 if 'ChecksumSHA256' in response:
                     s3_checksum: str = response['ChecksumSHA256']
                     if s3_checksum != sha256_checksum:
