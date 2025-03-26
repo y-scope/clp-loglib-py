@@ -1021,6 +1021,7 @@ class CLPS3Handler(CLPBaseHandler):
     :param s3_bucket: S3 bucket to upload CLP encoded log messages to
     :param stream: Target stream to write log messages to
     :param enable_compression: Option to enable/disable stream compression
+        Default: True
     :param timestamp_format: Timestamp format written in preamble to be
         used when generating the logs with a reader.
     :param timezone: Timezone written in preamble to be used when
@@ -1030,10 +1031,11 @@ class CLPS3Handler(CLPBaseHandler):
     :param s3_directory: S3 remote directory to upload objects to.
     :param use_multipart_upload: Option to use multipart upload to upload
         stream segments or use PutObject to upload the entire buffer.
+        Default: True
     :param max_part_num: Maximum number of parts allowed for a multipart upload
-        session before uploading to a new object.
+        session before uploading to a new object. Default: 10000
     :param upload_part_size: Maximum size of a part in a multipart upload
-        session before writing to a new part.
+        session before writing to a new part. Default: 5MB
     """
 
     def __init__(
@@ -1246,6 +1248,7 @@ class CLPS3Handler(CLPBaseHandler):
         """
         Complete a multipart upload session and clear the local buffer.
         """
+        # Flush EOF marker to the local buffer and upload
         self._ostream.write(EOF_CHAR)
         self._flush()
         self._local_buffer.seek(0)
