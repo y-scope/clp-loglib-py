@@ -46,8 +46,7 @@ dictionaries, where each dictionary entry must abide by the requirements detaile
 > [!WARNING]
 > This handler cannot be used with other logging handlers since it requires that the `msg` argument
 > passed to the logging method is a dictionary, whereas other handlers expect the `msg` argument to
-> be a format string. In the future, this handler may be moved to another library to avoid
-> confusion.
+> be a format string. In the future, this handler may be moved or reworked to avoid confusion.
 
 > [!NOTE]
 > Since this handler accepts structured log events, it doesn't support setting a
