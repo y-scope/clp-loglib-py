@@ -44,9 +44,10 @@ dictionaries, where each dictionary entry must abide by the requirements detaile
 [metadata](#automatically-generated-kv-pairs) (e.g., the log event's level) with each log event.
 
 > [!WARNING]
-> This handler cannot be used with other logging handlers since it requires the `msg` argument
-> passed to the logging method to be a dictionary. In contrast, standard handlers typically treat
-> `msg` as a format string. In the future, this handler may be moved or reworked to avoid confusion.
+> This handler cannot be used with other logging handlers since it requires `msg` (the first
+> argument passed to the logging method) to be a dictionary. In contrast, standard handlers
+> typically treat `msg` as a format string. In the future, this handler may be moved or reworked to
+> avoid confusion.
 
 > [!NOTE]
 > Since this handler accepts structured log events, it doesn't support setting a
