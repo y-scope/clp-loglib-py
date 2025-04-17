@@ -43,6 +43,12 @@ dictionaries, where each dictionary entry must abide by the requirements detaile
 [below](#key-value-pair-requirements). The handler will also automatically include certain
 [metadata](#automatically-generated-kv-pairs) (e.g., the log event's level) with each log event.
 
+> [!WARNING]
+> This handler cannot be used with other logging handlers since it requires that the `msg` argument
+> passed to the logging method is a dictionary, whereas other handlers expect the `msg` argument to
+> be a format string. In the future, this handler may be moved to another library to avoid
+> confusion.
+
 > [!NOTE]
 > Since this handler accepts structured log events, it doesn't support setting a
 > [Formatter][py-logging-formatter] (because the log events don't need to be formatted into a
